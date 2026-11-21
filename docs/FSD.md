@@ -11,7 +11,7 @@ The owner's decisions so far are listed below. Items marked **[PROPOSED]** are d
 ## 1. Scope
 
 The panel is ESP-IDF firmware for the Waveshare ESP32-S3-Touch-LCD-4.3:
-- ESP32-S3 with 16 MB flash and 8 MB octal PSRAM;
+- ESP32-S3 (rev v0.2) with 8 MB flash and 8 MB octal PSRAM (measured on the owner's board; Waveshare also sells a 16 MB variant);
 - 4.3" 800×480 RGB565 LCD;
 - GT911 capacitive touch;
 - CH422G I/O expander.
@@ -33,9 +33,10 @@ Out of scope for v1: cameras/video, charts, audio, more than one openHAB server.
 | RGB LCD | HSYNC 46, VSYNC 3, DE 5, PCLK 7, D0–D15 = 14, 38, 18, 17, 10, 39, 0, 45, 48, 47, 21, 1, 2, 42, 41, 40 |
 | I2C (touch + expander) | SDA 8, SCL 9 |
 | GT911 touch | I2C, address 0x5D (or 0x14) |
-| CH422G expander | LCD backlight on/off (EXIO2), LCD reset, touch reset |
+| CH422G expander | EXIO1 touch reset, EXIO2 backlight on/off, EXIO3 LCD reset, EXIO4 SD card CS, EXIO5 USB_SEL |
 
-- **REQ-HW-1:** the board support uses the ESP-IDF component `bobscott45/waveshare_esp32_s3_touch_lcd_4_3`. It supports IDF 6.x and LVGL 9. The framebuffer lives in PSRAM, with bounce-buffer mode to avoid display drift.
+- **REQ-HW-1:** the board support is `components/wp_board`, vendored from `bobscott45/waveshare_esp32_s3_touch_lcd_4_3` 1.0.7 (IDF 6.x, LVGL 9.6). The framebuffer lives in PSRAM, with bounce-buffer mode to avoid display drift.
+- **REQ-HW-4:** CH422G EXIO5 (USB_SEL) is always kept low. When it is high, GPIO19/20 are routed to the CAN transceiver and the native USB port disappears; the CH422G keeps that state across an ESP reset. The upstream BSP set it during touch reset, which is why it is vendored. All CH422G writes go through one shadow register.
 - **REQ-HW-2:** the backlight can only be switched on and off, because the CH422G has no PWM. Dimming would need a hardware modification and is out of scope for v1.
 - **REQ-HW-3:** all I2C transfers stay within the controller FIFO. This is the lesson from the sensor-actor project, where longer transfers corrupted the ESP-IDF 6.1 i2c_master driver state.
 
@@ -118,11 +119,11 @@ The tile type is chosen automatically from the item type and its semantic tags. 
 
 - ESP-IDF v6.1 (`/workspace/esp`), target esp32s3, LVGL 9 via esp_lvgl_port.
 - Repo: /workspace/oh-wallpanel, on GitHub as `ulijoergens/oh-wallpanel`. CI builds in GitHub Actions with `espressif/idf:v6.1`.
-- Partitions: 16 MB flash, with two OTA slots of 4 MB each, NVS and a coredump partition.
+- Partitions (`partitions.csv`): 8 MB flash, with two OTA slots of 3 MB each, NVS (24 KB) and a 64 KB coredump partition.
 
 ## 8. Milestones
 
-1. **Bring-up:**
+1. **Bring-up:** done 2026-11-21 (colour bars, touch, backlight verified on the board).
    - LCD, touch and backlight work;
    - an LVGL demo screen shows;
    - touch coordinates are correct;
