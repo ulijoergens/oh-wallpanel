@@ -50,7 +50,7 @@ Out of scope for v1: cameras/video, charts, audio, more than one openHAB server.
   - at boot;
   - when the panel reconnects to openHAB;
   - every 10 minutes;
-  - when the item registry changes (SSE `ItemAddedEvent`, `ItemUpdatedEvent` or `ItemRemovedEvent` for any item). Re-tagging an item in openHAB therefore changes the panel within seconds.
+  - when the item or rule registry changes (SSE `ItemAddedEvent`, `ItemUpdatedEvent`, `ItemRemovedEvent`, and the same for rules). Re-tagging an item or rule in openHAB therefore changes the panel within seconds. Changing only `wallpanel` metadata publishes no event (openHAB 5.2), so it shows up with the 10-minute reload, or at once with the console command `reload`.
 - **REQ-SCR-6:** you switch screens with a bottom tab bar showing the screen titles. Swiping left and right also works.
 - **REQ-SCR-7:** after 60 s without a touch, the panel returns to the home screen.
 
@@ -70,7 +70,7 @@ The tile type is chosen automatically from the item type and its semantic tags. 
 | Group (Switch/Dimmer base type) | toggle tile acting on the group | toggle ON/OFF |
 | Rule with the screen tag | scene button | run the rule (`POST /rest/rules/<uid>/runnow`) |
 
-- **REQ-TILE-1:** values are formatted with the state-description pattern, for `%d`, `%.Nf`, `%s` and the unit. DateTime values are shown as `HH:mm` or `d MMM HH:mm`.
+- **REQ-TILE-1:** values are formatted with the state-description pattern, for `%d`, `%.Nf`, `%s` and the unit. DateTime values are shown as `HH:mm` or `d MMM HH:mm`. In practice the SSE `displayState` already carries openHAB's formatted value and is used as is. Exception: setpoint tiles format the raw state with the precision of their step, because openHAB's default pattern for `Number:Temperature` is `%.0f` (21.5 °C would show as "22 °C").
 - **REQ-TILE-2:** read-only items are never given a control. This covers state descriptions with `readOnly: true`.
 - **REQ-TILE-3:** the `wallpanel` metadata config can override `label`, `icon` (from a fixed built-in icon set), `order`, `step`, `min` and `max`.
 - **REQ-TILE-4:** "All off" button. A screen with two or more switchable light tiles shows an "All off" button. Switchable light tiles are Switch, Dimmer or Color items with the semantic property `Light` or the tag `Lighting`. The button sends OFF to each of those items.
@@ -94,7 +94,7 @@ The tile type is chosen automatically from the item type and its semantic tags. 
   2. `POST /rest/events/states/<id>` sends the list of item names shown on any screen;
   3. the panel then receives `{item: {state, displayState, type}}` updates.
 
-  A second stream, `/rest/events?topics=openhab/items/*/added,openhab/items/*/updated,openhab/items/*/removed`, triggers REQ-SCR-5.
+  A second stream, `/rest/events?topics=openhab/items/*/added,openhab/items/*/updated,openhab/items/*/removed` plus the same three topics for `openhab/rules/*`, triggers REQ-SCR-5. openHAB sends these as `event: message`; the state stream sends unnamed events, an `event: ready` with the connection id, and `event: alive` every 10 s (used as the stream watchdog: no data for 15 s means reconnect).
 - **REQ-OH-4:** commands are sent with `POST /rest/items/<name>` as text/plain.
 - **REQ-OH-5:** if a stream drops, the panel reconnects with backoff: 1, 2, 5, then 10 s. While disconnected, the status bar shows "openHAB offline" and tiles are greyed out.
 
@@ -129,7 +129,7 @@ The tile type is chosen automatically from the item type and its semantic tags. 
    - touch coordinates are correct;
    - no drift.
 2. **Wi-Fi and settings:** done 2026-11-22 (verified on the board). Wi-Fi, captive portal and web UI settings (ported from sensor-actor), plus SNTP.
-3. **openHAB client:**
+3. **openHAB client:** done 2026-11-22 (tested on the board through the console; unit tests pass).
    - the item list per tag;
    - SSE state subscription;
    - commands.

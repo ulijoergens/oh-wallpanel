@@ -60,6 +60,12 @@ static int cmd_status(int argc, char **argv)
     if (o.last_error[0]) {
         printf("         %s\n", o.last_error);
     }
+    if (c->oh_url[0]) {
+        printf("         streams: states %s, registry %s; %lu loads, %lu updates, commands %lu ok / %lu failed\n",
+               o.stream_up ? "up" : "down", o.registry_up ? "up" : "down", (unsigned long)o.reloads,
+               (unsigned long)o.updates, (unsigned long)o.commands_ok, (unsigned long)o.commands_failed);
+        if (o.last_command_error[0]) printf("         last command error: %s\n", o.last_command_error);
+    }
     time_t now = time(NULL);
     struct tm tm;
     localtime_r(&now, &tm);
@@ -342,6 +348,91 @@ static void console_task(void *arg)
     }
 }
 
+// ---- openHAB (milestone 3: data layer, inspected and driven from the console) ----
+
+static void print_screen(const wp_oh_screen_t *s, bool status)
+{
+    printf("%s \"%s\" (tag %s): %d tiles%s%s\n", status ? "status" : "screen", s->title, s->tag, s->count,
+           s->truncated ? ", TRUNCATED" : "", !status && s->lights >= 2 ? ", All off" : "");
+    for (int i = 0; i < s->count; i++) {
+        const wp_tile_t *t = &s->tiles[i];
+        printf("  %-8s %-20.20s %-24s %s%s%s\n", wp_tile_kind_name(t->kind), t->label,
+               t->display[0] ? t->display : t->state, t->name, t->light ? " [light]" : "",
+               t->alert ? " [alert]" : "");
+    }
+}
+
+static int cmd_screens(int argc, char **argv)
+{
+    // Copy one screen at a time so the model lock is not held while printing.
+    wp_oh_screen_t copy;
+    copy.tiles = heap_caps_malloc(WP_MAX_TILES * sizeof(wp_tile_t), MALLOC_CAP_SPIRAM);
+    if (!copy.tiles) {
+        printf("out of memory\n");
+        return 1;
+    }
+    const wp_oh_model_t *m = wp_oh_model_lock();
+    int n = m->screen_count;
+    uint32_t ver = m->version;
+    wp_oh_model_unlock();
+    if (!ver) {
+        printf("no screens loaded yet\n");
+    }
+    for (int i = 0; ver && i <= n; i++) {
+        m = wp_oh_model_lock();
+        bool same = m->version == ver;
+        if (same) {
+            const wp_oh_screen_t *s = i < n ? &m->screens[i] : &m->status;
+            wp_tile_t *keep = copy.tiles;
+            copy = *s;
+            copy.tiles = keep;
+            memcpy(copy.tiles, s->tiles, s->count * sizeof(wp_tile_t));
+        }
+        wp_oh_model_unlock();
+        if (!same) {
+            printf("(screens reloaded meanwhile, run it again)\n");
+            break;
+        }
+        print_screen(&copy, i == n);
+    }
+    heap_caps_free(copy.tiles);
+    return 0;
+}
+
+static int cmd_send(int argc, char **argv)
+{
+    if (argc < 3) {
+        printf("usage: send <item> <command>   e.g. send Kitchen_Light ON\n");
+        return 1;
+    }
+    char val[WP_STATE_MAX + 1] = "";
+    for (int i = 2; i < argc; i++) {   // values may contain spaces: "21.5 °C"
+        if (i > 2) strlcat(val, " ", sizeof(val));
+        strlcat(val, argv[i], sizeof(val));
+    }
+    esp_err_t err = wp_oh_command(argv[1], val);
+    printf(err == ESP_OK ? "queued\n" : "not queued: %s\n", esp_err_to_name(err));
+    return err != ESP_OK;
+}
+
+static int cmd_run(int argc, char **argv)
+{
+    if (argc != 2) {
+        printf("usage: run <rule-uid>\n");
+        return 1;
+    }
+    esp_err_t err = wp_oh_run_rule(argv[1]);
+    printf(err == ESP_OK ? "queued\n" : "not queued: %s\n", esp_err_to_name(err));
+    return err != ESP_OK;
+}
+
+static int cmd_reload(int argc, char **argv)
+{
+    wp_oh_reload();
+    printf("reloading screens\n");
+    return 0;
+}
+
 void console_start(void)
 {
     usb_serial_jtag_driver_config_t uc = {.rx_buffer_size = 512, .tx_buffer_size = 1024};
@@ -359,6 +450,10 @@ void console_start(void)
         {.command = "wifi-scan", .help = "List WiFi networks in range", .func = cmd_wifi_scan},
         {.command = "net", .help = "IP address, gateway, DNS and access point details", .func = cmd_net},
         {.command = "ping", .help = "ping <ip> [count]: check reachability from the device", .func = cmd_ping},
+        {.command = "screens", .help = "Screens and tiles loaded from openHAB, with live states", .func = cmd_screens},
+        {.command = "send", .help = "send <item> <command>: send an openHAB item command", .func = cmd_send},
+        {.command = "run", .help = "run <rule-uid>: run an openHAB rule (scene)", .func = cmd_run},
+        {.command = "reload", .help = "Reload the screens from openHAB now", .func = cmd_reload},
         {.command = "reboot", .help = "Restart the device", .func = cmd_reboot},
         {.command = "crash-test", .help = "crash-test abort|intwdt: crash on purpose to test crash reports", .func = cmd_crash_test},
         {.command = "factory-reset", .help = "Erase all settings and restart", .func = cmd_factory_reset},

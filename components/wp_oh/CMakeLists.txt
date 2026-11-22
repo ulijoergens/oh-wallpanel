@@ -1,3 +1,4 @@
-idf_component_register(SRCS "wp_oh.c"
+idf_component_register(SRCS "wp_oh.c" "wp_model.c"
                        INCLUDE_DIRS "include"
-                       PRIV_REQUIRES esp_http_client esp-tls log wp_config wifi_mgr)
+                       REQUIRES wp_config
+                       PRIV_REQUIRES esp_http_client esp-tls esp_timer log wifi_mgr)
