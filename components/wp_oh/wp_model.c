@@ -116,9 +116,10 @@ static wp_tile_kind_t default_kind(const char *base, const char *group_base, con
     if (strcmp(base, "Rollershutter") == 0) return WP_TILE_ROLLER;
     if (strcmp(base, "Number") == 0 && has_tag(tags, "Setpoint")) return WP_TILE_SETPOINT;
     if (strcmp(base, "Group") == 0) {
-        if (!strcmp(group_base, "Switch") || !strcmp(group_base, "Dimmer") || !strcmp(group_base, "Color")) {
-            return WP_TILE_SWITCH;   // toggle acting on the whole group
-        }
+        // A Dimmer/Color group gets a dimmer: one tile driving several lights (e.g. the
+        // pergola's three lights). Commands to a group go to all its members.
+        if (!strcmp(group_base, "Dimmer") || !strcmp(group_base, "Color")) return WP_TILE_DIMMER;
+        if (!strcmp(group_base, "Switch")) return WP_TILE_SWITCH;   // toggle acting on the whole group
         if (!strcmp(group_base, "Rollershutter")) return WP_TILE_ROLLER;
     }
     return WP_TILE_VALUE;
@@ -165,7 +166,9 @@ static void parse_item(const cJSON *it, wp_tile_t *t)
     }
 
     bool lightable = t->kind == WP_TILE_SWITCH || t->kind == WP_TILE_DIMMER || t->kind == WP_TILE_COLOR;
-    t->light = lightable && strcmp(base, "Group") != 0 && (has_tag(tags, "Light") || has_tag(tags, "Lighting"));
+    // Groups count only when tagged Light themselves: an untagged whole-house group such
+    // as gLights must not be switched off by a room's "All off".
+    t->light = lightable && (has_tag(tags, "Light") || has_tag(tags, "Lighting"));
     t->alert = json_true(cfg, "alert");
 
     t->order = json_num(cfg, "order");

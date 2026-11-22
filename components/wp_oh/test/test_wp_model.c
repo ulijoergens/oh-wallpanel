@@ -23,6 +23,7 @@ static const char *ITEMS =
     " \"metadata\":{\"wallpanel\":{\"value\":\"scene\",\"config\":{\"alert\":\"true\",\"icon\":\"film\"}}}},"
     "{\"state\":\"0\",\"type\":\"Rollershutter\",\"name\":\"Pergola\",\"label\":\"Control\",\"tags\":[\"Point\"]},"
     "{\"state\":\"NULL\",\"type\":\"Dimmer\",\"name\":\"Courtyard\",\"tags\":[\"Lighting\"]},"
+    "{\"state\":\"100\",\"type\":\"Group\",\"groupType\":\"Dimmer\",\"name\":\"gPergola\",\"label\":\"Pergola lights\",\"tags\":[\"Light\"]},"
     "{\"name\":\"no_type\"}"
     "]";
 
@@ -40,7 +41,7 @@ TEST_CASE("items: tile types follow FSD 3.1", "[wp_model]")
     static wp_tile_t t[16];
     bool trunc;
     int n = wp_model_parse_items(ITEMS, t, 16, &trunc);
-    TEST_ASSERT_EQUAL(9, n);   // the entry without a type is skipped
+    TEST_ASSERT_EQUAL(10, n);  // the entry without a type is skipped
     TEST_ASSERT_FALSE(trunc);
     TEST_ASSERT_EQUAL(WP_TILE_SWITCH, find(t, n, "gLights")->kind);
     TEST_ASSERT_EQUAL(WP_TILE_SETPOINT, find(t, n, "Bedroom_Setpoint")->kind);
@@ -51,6 +52,7 @@ TEST_CASE("items: tile types follow FSD 3.1", "[wp_model]")
     TEST_ASSERT_EQUAL(WP_TILE_SCENE, find(t, n, "Movie")->kind);          // metadata override
     TEST_ASSERT_EQUAL(WP_TILE_ROLLER, find(t, n, "Pergola")->kind);
     TEST_ASSERT_EQUAL(WP_TILE_DIMMER, find(t, n, "Courtyard")->kind);
+    TEST_ASSERT_EQUAL(WP_TILE_DIMMER, find(t, n, "gPergola")->kind);     // Dimmer group: one dimmer for all
 }
 
 TEST_CASE("items: labels, limits, flags", "[wp_model]")
@@ -71,7 +73,8 @@ TEST_CASE("items: labels, limits, flags", "[wp_model]")
 
     TEST_ASSERT_TRUE(find(t, n, "Salon_Strip")->light);
     TEST_ASSERT_TRUE(find(t, n, "Courtyard")->light);     // tag Lighting
-    TEST_ASSERT_FALSE(find(t, n, "gLights")->light);      // groups never count
+    TEST_ASSERT_FALSE(find(t, n, "gLights")->light);      // untagged group: not a light
+    TEST_ASSERT_TRUE(find(t, n, "gPergola")->light);      // group tagged Light counts
     TEST_ASSERT_FALSE(find(t, n, "Movie")->light);        // a scene is not a switchable light
     TEST_ASSERT_TRUE(find(t, n, "Movie")->alert);
     TEST_ASSERT_EQUAL_STRING("film", find(t, n, "Movie")->icon);

@@ -68,13 +68,14 @@ The tile type is chosen automatically from the item type and its semantic tags. 
 | Number with Setpoint semantics | setpoint stepper (− value +) | ± step (default 0.5); min/max from the state description |
 | Number / Number:\<dim\> (Measurement) | value tile (label, value, unit) | none |
 | String / DateTime / Contact | value tile | none |
-| Group (Switch/Dimmer base type) | toggle tile acting on the group | toggle ON/OFF |
+| Group (Switch base type) | toggle tile acting on the group | toggle ON/OFF |
+| Group (Dimmer/Color base type) | dimmer tile acting on all members (e.g. `gPergolaLights`) | as Dimmer |
 | Rule with the screen tag | scene button | run the rule (`POST /rest/rules/<uid>/runnow`) |
 
 - **REQ-TILE-1:** values are formatted with the state-description pattern, for `%d`, `%.Nf`, `%s` and the unit. DateTime values are shown as `HH:mm` or `d MMM HH:mm`. In practice the SSE `displayState` already carries openHAB's formatted value and is used as is. Exception: setpoint tiles format the raw state with the precision of their step, because openHAB's default pattern for `Number:Temperature` is `%.0f` (21.5 °C would show as "22 °C").
 - **REQ-TILE-2:** read-only items are never given a control. This covers state descriptions with `readOnly: true`.
 - **REQ-TILE-3:** the `wallpanel` metadata config can override `label`, `icon` (from a fixed built-in icon set), `order`, `step`, `min` and `max`. Icon names: `light`, `power`, `home`, `bell`, `alarm`, `warning`, `play`, `settings`, `water`, `wifi`, `eye`, `location`, `battery`, `camera`, `audio`, `refresh`, `up`, `down` (LVGL's built-in symbols; a bulb or thermometer would need a custom icon font). The built-in fonts cover ASCII plus `°`, so labels with other accented letters show gaps.
-- **REQ-TILE-4:** "All off" button. A screen with two or more switchable light tiles shows an "All off" button. Switchable light tiles are Switch, Dimmer or Color items with the semantic property `Light` or the tag `Lighting`. The button sends OFF to each of those items.
+- **REQ-TILE-4:** "All off" button. A screen with two or more switchable light tiles shows an "All off" button. Switchable light tiles are Switch, Dimmer or Color items, or groups of them, with the semantic property `Light` or the tag `Lighting`. A group only counts when it carries the tag itself, so an untagged whole-house group is never switched off from a room screen. The button sends OFF to each of those items.
 - **REQ-TILE-5:** a tile shows a "pending" state from the touch until the new state arrives over SSE. If no state arrives within 3 s, the tile goes back to the old state and flashes an error.
 
 ### 3.2 Status line
