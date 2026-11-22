@@ -467,9 +467,10 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
     #endif
     #else
         buffer_size = LVGL_PORT_H_RES * LVGL_PORT_BUFFER_HEIGHT;
-        buf1 = heap_caps_malloc(buffer_size * sizeof(lv_color_t), LVGL_PORT_BUFFER_MALLOC_CAPS);
+        /* RGB565: 2 bytes per pixel (lv_color_t is 3 bytes in LVGL 9, which over-allocated by 50 %) */
+        buf1 = heap_caps_malloc(buffer_size * 2, LVGL_PORT_BUFFER_MALLOC_CAPS);
         assert(buf1);
-        buf2 = heap_caps_malloc(buffer_size * sizeof(lv_color_t), LVGL_PORT_BUFFER_MALLOC_CAPS);
+        buf2 = heap_caps_malloc(buffer_size * 2, LVGL_PORT_BUFFER_MALLOC_CAPS);
         assert(buf2);
     #endif
 
@@ -487,7 +488,7 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
         render_mode = LV_DISPLAY_RENDER_MODE_FULL;
     #endif
 
-        lv_display_set_buffers(disp, buf1, buf2, buffer_size * sizeof(lv_color_t), render_mode);
+        lv_display_set_buffers(disp, buf1, buf2, buffer_size * 2, render_mode);   /* bytes, RGB565 */
         lv_display_set_flush_cb(disp, flush_callback);
         lv_display_set_user_data(disp, panel_handle);
         return disp;
@@ -525,9 +526,10 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
     #else
            // Enable double buffering in PSRAM for smooth rendering
            buffer_size = LVGL_PORT_H_RES * LVGL_PORT_BUFFER_HEIGHT; // Calculate buffer size
-            buf1 = heap_caps_malloc(buffer_size * sizeof(lv_color_t), LVGL_PORT_BUFFER_MALLOC_CAPS); // Allocate memory
+            /* RGB565: 2 bytes per pixel (lv_color_t is 3 bytes in LVGL 9, which over-allocated by 50 %) */
+        buf1 = heap_caps_malloc(buffer_size * 2, LVGL_PORT_BUFFER_MALLOC_CAPS); // Allocate memory
             assert(buf1); // Ensure allocation succeeded
-            buf2 = heap_caps_malloc(buffer_size * sizeof(lv_color_t), LVGL_PORT_BUFFER_MALLOC_CAPS); // Allocate memory
+            buf2 = heap_caps_malloc(buffer_size * 2, LVGL_PORT_BUFFER_MALLOC_CAPS); // Allocate memory
             assert(buf2); // Ensure allocation succeeded
             ESP_LOGI(TAG, "LVGL buffer size: %dKB x 2", buffer_size * sizeof(lv_color_t) / 1024); // Log buffer size
     #endif /* LVGL_PORT_AVOID_TEAR_ENABLE */

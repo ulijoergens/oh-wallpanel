@@ -1,0 +1,16 @@
+// Shared helpers of the web UI handlers.
+#pragma once
+
+#include "cJSON.h"
+#include "esp_http_server.h"
+
+esp_err_t webui_send_json(httpd_req_t *req, cJSON *root);   // takes ownership of root
+esp_err_t webui_send_error(httpd_req_t *req, const char *status, const char *msg);
+cJSON *webui_read_json(httpd_req_t *req, const char **why);  // NULL + why on error
+
+// Registers a handler; a failure is logged (the UI then lacks that endpoint) instead of
+// aborting, so a full handler table can never cause a boot loop.
+void webui_register(httpd_handle_t srv, const httpd_uri_t *uri);
+
+void webui_register_crash(httpd_handle_t srv);
+void webui_register_ota(httpd_handle_t srv);

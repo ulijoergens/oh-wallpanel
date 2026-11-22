@@ -2,6 +2,13 @@
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+# Flash and PSRAM share the MSPI bus: every flash cache miss stalls the LCD's PSRAM reads.
+# QIO (the GD25Q64 supports it, eFuse says quad) and bigger caches keep the bus free, which
+# stops the picture jumping while code runs from flash (2026-11-22).
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_LINE_64B=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
@@ -14,14 +21,23 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
-CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
-CONFIG_SPIRAM_RODATA=y
+# Code and rodata stay in flash. With both options on (code copied to PSRAM), 8 of 8 boots
+# died with a silent TG1WDT reset as soon as LVGL started drawing: JTAG showed an
+# IllegalInstruction inside the panic handler itself, i.e. instruction fetches from PSRAM
+# returned garbage while the RGB LCD streamed its framebuffer from PSRAM (2026-11-22).
+# With them off: 30/30 clean boots plus a 3-minute soak with NVS writes. Cost: the panel
+# glitches briefly during flash writes (ISR not IRAM-safe, see below).
+# CONFIG_SPIRAM_FETCH_INSTRUCTIONS is not set
+# CONFIG_SPIRAM_RODATA is not set
 CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 CONFIG_FREERTOS_HZ=1000
 
 # RGB LCD: bounce buffer against drift/underflow (REQ-HW-1)
 CONFIG_LCD_RGB_BOUNCE_BUFFER_MODE=y
 CONFIG_LCD_RGB_BOUNCE_BUFFER_HEIGHT=20
+# Not CONFIG_LCD_RGB_ISR_IRAM_SAFE: the bounce-buffer ISR then runs during flash
+# operations and reads the PSRAM framebuffer while the cache is off (crash, 2026-11-22).
+CONFIG_LCD_RGB_RESTART_IN_VSYNC=y
 
 # LVGL port (BSP)
 CONFIG_LVGL_PORT_TASK_CORE=1
@@ -29,7 +45,8 @@ CONFIG_LVGL_PORT_TASK_STACK_SIZE_KB=16
 CONFIG_LVGL_PORT_TASK_MIN_DELAY_MS=1
 CONFIG_LVGL_PORT_AVOID_TEAR_ENABLE=n
 CONFIG_LVGL_PORT_BUF_INTERNAL=y
-CONFIG_LVGL_PORT_BUF_HEIGHT=40
+# 10 lines: internal RAM went to the 32 KB instruction cache
+CONFIG_LVGL_PORT_BUF_HEIGHT=10
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_DEF_REFR_PERIOD=15
 CONFIG_LV_ATTRIBUTE_FAST_MEM=y
@@ -38,3 +55,29 @@ CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
 CONFIG_LV_FONT_MONTSERRAT_28=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Console on the native USB port (the board's /dev/ttyACM0)
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# LVGL widgets used by the UI
+# lv_qrcode only for its bundled qrcodegen encoder; the widget itself hangs (see ui.c)
+CONFIG_LV_USE_QRCODE=y
+CONFIG_LV_USE_CANVAS=y
+
+# Web server, HTTP client
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# Version, crash reports (as in sensor-actor)
+CONFIG_APP_PROJECT_VER_FROM_CONFIG=y
+CONFIG_APP_PROJECT_VER="0.2.0"
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# Internal RAM is tight (RGB bounce buffers + LVGL draw buffers + WiFi): keep WiFi code in flash
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_LWIP_DHCP_GET_NTP_SRV=y
+CONFIG_LWIP_SNTP_MAX_SERVERS=2

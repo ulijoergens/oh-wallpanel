@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wall panel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="#/"><span class="dot" id="hdr-dot"></span><span id="hdr-name">Wall panel</span></a>
+  <nav>
+    <a href="#/" data-page="home">Home</a>
+    <a href="#/settings" data-page="settings">Settings</a>
+    <a href="#/status" data-page="status">Status</a>
+  </nav>
+</header>
+
+<main>
+  <!-- Home -->
+  <section id="page-home" hidden>
+    <h1>Overview</h1>
+    <p class="banner" id="h-ap-banner" hidden>Not connected to a WiFi network. <a href="#/settings">Enter your WiFi in Settings</a>. The panel then restarts and joins it.</p>
+    <div class="cards">
+      <div class="card"><h3>WiFi</h3><div class="big" id="h-wifi">–</div><div class="sub" id="h-wifi-sub"></div></div>
+      <div class="card"><h3>openHAB</h3><div class="big" id="h-oh">–</div><div class="sub" id="h-oh-sub"></div></div>
+      <div class="card"><h3>Uptime</h3><div class="big" id="h-uptime">–</div><div class="sub" id="h-reset"></div></div>
+      <div class="card"><h3>Warnings / errors</h3><div class="big" id="h-log">–</div><div class="sub"><a href="#/status">Show log</a></div></div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section id="page-settings" hidden>
+    <h1>Settings</h1>
+    <form id="settings" autocomplete="off" novalidate>
+      <fieldset><legend>Panel</legend>
+        <label>Panel name <input name="name" maxlength="32" required>
+          <small>Also used as the network host name.</small></label>
+      </fieldset>
+      <fieldset><legend>WiFi</legend>
+        <div class="buttons"><button type="button" id="btn-wifi-scan">Find networks</button></div>
+        <p class="msg" id="wifi-scan-msg"></p>
+        <div class="netlist" id="wifi-list"></div>
+        <label>Network (SSID) <input name="wifi_ssid" maxlength="32">
+          <small>Pick a network above or type its name. Leave empty to run as access point only.</small></label>
+        <label>Password <input name="wifi_pass" type="password" maxlength="64" data-secret="wifi_pass"></label>
+        <label class="check"><input type="checkbox" name="wifi_pass_clear"> Remove stored password (open network)</label>
+      </fieldset>
+      <fieldset><legend>openHAB</legend>
+        <label>URL <input name="oh_url" maxlength="96" placeholder="http://192.168.1.139:8080">
+          <small>Base URL of the openHAB server, without a trailing slash. Leave empty until openHAB is set up.</small></label>
+        <label>API token <input name="oh_token" type="password" maxlength="160" data-secret="oh_token">
+          <small>Create it in openHAB under your user profile → API tokens. It is stored on the panel and never shown again.</small></label>
+        <label class="check"><input type="checkbox" name="oh_token_clear"> Remove stored token</label>
+      </fieldset>
+      <fieldset><legend>Screens</legend>
+        <label>Screens <input name="screens" maxlength="255" required>
+          <small>Comma-separated <code>tag</code> or <code>tag=Title</code>, up to 8. The first is the home screen. Each screen shows the openHAB items and rules with its tag. Example: <code>wp_home=Home, wp_kitchen=Kitchen</code></small></label>
+        <label>Status line tag <input name="status_tag" maxlength="32" required>
+          <small>Items with this tag are shown in the top bar (up to four).</small></label>
+      </fieldset>
+      <fieldset><legend>Display</legend>
+        <div class="row">
+          <label>Back to home after (s) <input name="home_timeout_s" type="number" min="0" max="3600" required></label>
+          <label>Screen off after (s) <input name="dark_timeout_s" type="number" min="0" max="3600" required></label>
+        </div>
+        <small class="muted">0 turns the timeout off.</small>
+        <label class="check"><input type="checkbox" name="night_mode"> Night mode: the screen stays dark until touched</label>
+        <div class="row">
+          <label>From <input name="night_start" type="time" required></label>
+          <label>Until <input name="night_end" type="time" required></label>
+        </div>
+        <label>Time zone (POSIX) <input name="tz" maxlength="48" required>
+          <small>Europe/Paris and Berlin: <code>CET-1CEST,M3.5.0,M10.5.0/3</code></small></label>
+      </fieldset>
+      <p class="msg" id="settings-msg"></p>
+      <div class="buttons">
+        <button type="submit" class="primary">Save and restart</button>
+        <button type="button" id="btn-reboot">Restart</button>
+      </div>
+    </form>
+    <h2>Firmware update</h2>
+    <fieldset>
+      <table class="kv" id="ota-table"></table>
+      <label>Firmware file (<code>build/oh-wallpanel.bin</code>) <input type="file" id="ota-file" accept=".bin"></label>
+      <progress id="ota-progress" max="100" value="0" hidden></progress>
+      <p class="msg" id="ota-msg"></p>
+      <div class="buttons"><button type="button" id="btn-ota" class="primary">Upload and install</button></div>
+      <p class="muted">The panel installs the new firmware in its second slot and restarts. If the new firmware does not come up (WiFi and web server) within 60 seconds, the panel goes back to the previous firmware automatically.</p>
+    </fieldset>
+  </section>
+
+  <!-- Status -->
+  <section id="page-status" hidden>
+    <h1>Status</h1>
+    <table class="kv" id="status-table"></table>
+    <h2>Error log</h2>
+    <table class="log"><thead><tr><th>Time</th><th></th><th>Message</th></tr></thead><tbody id="log-body"></tbody></table>
+    <h2>Before the last restart</h2>
+    <p class="muted" id="prev-info"></p>
+    <table class="log" id="prev-table"><thead><tr><th>Start</th><th>Time</th><th></th><th>Message</th></tr></thead><tbody id="prev-body"></tbody></table>
+    <div class="buttons" style="margin-top:8px"><button type="button" id="btn-log-clear">Clear stored log</button></div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
