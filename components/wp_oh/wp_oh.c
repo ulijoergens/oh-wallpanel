@@ -710,6 +710,10 @@ void wp_oh_get_status(wp_oh_status_t *out)
 esp_err_t wp_oh_start(void)
 {
     s_st.state = "not configured";
+    // Every dropped connection (e.g. a WiFi roam) made the HTTP client log 3-6 errors,
+    // and the warning log is saved to flash. This client reports problems itself, once.
+    esp_log_level_set("HTTP_CLIENT", ESP_LOG_NONE);
+    esp_log_level_set("transport_base", ESP_LOG_NONE);
     s_lock = xSemaphoreCreateMutex();
     s_ev = xEventGroupCreate();
     s_cmdq = xQueueCreateWithCaps(CMD_QUEUE_LEN, sizeof(cmd_t), MALLOC_CAP_SPIRAM);

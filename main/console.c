@@ -30,6 +30,7 @@
 #include "wp_config.h"
 #include "wp_log.h"
 #include "wp_oh.h"
+#include "ui.h"
 #include "wifi_mgr.h"
 
 static int cmd_status(int argc, char **argv)
@@ -426,6 +427,54 @@ static int cmd_run(int argc, char **argv)
     return err != ESP_OK;
 }
 
+static int cmd_fbdump(int argc, char **argv)
+{
+    ui_dump_framebuffer();
+    return 0;
+}
+
+static int cmd_tab(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("usage: tab <n> [scroll_y]   (0 = home screen)\n");
+        return 1;
+    }
+    ui_show_tab(atoi(argv[1]), argc > 2 ? atoi(argv[2]) : 0);
+    return 0;
+}
+
+static int cmd_tap(int argc, char **argv)
+{
+    if (argc != 3) {
+        printf("usage: tap <x> <y>\n");
+        return 1;
+    }
+    ui_tap(atoi(argv[1]), atoi(argv[2]));
+    return 0;
+}
+
+static int cmd_touchlog(int argc, char **argv)
+{
+    bool on = argc < 2 || strcmp(argv[1], "off") != 0;
+    ui_touchlog(on);
+    printf("touch log %s\n", on ? "on" : "off");
+    return 0;
+}
+
+static int cmd_touchtest(int argc, char **argv)
+{
+    bool on = argc < 2 || strcmp(argv[1], "off") != 0;
+    ui_touchtest(on);
+    printf("touch test %s\n", on ? "on" : "off");
+    return 0;
+}
+
+static int cmd_gt911(int argc, char **argv)
+{
+    ui_dump_gt911();
+    return 0;
+}
+
 static int cmd_reload(int argc, char **argv)
 {
     wp_oh_reload();
@@ -453,6 +502,12 @@ void console_start(void)
         {.command = "screens", .help = "Screens and tiles loaded from openHAB, with live states", .func = cmd_screens},
         {.command = "send", .help = "send <item> <command>: send an openHAB item command", .func = cmd_send},
         {.command = "run", .help = "run <rule-uid>: run an openHAB rule (scene)", .func = cmd_run},
+        {.command = "fbdump", .help = "Dump the screen for tools/fbdump.py (developer aid)", .func = cmd_fbdump},
+        {.command = "tab", .help = "tab <n> [scroll_y]: show a screen (developer aid)", .func = cmd_tab},
+        {.command = "tap", .help = "tap <x> <y>: click what is shown there (developer aid)", .func = cmd_tap},
+        {.command = "touchlog", .help = "touchlog [on|off]: log what each touch hits (developer aid)", .func = cmd_touchlog},
+        {.command = "touchtest", .help = "touchtest [on|off]: full-screen touch test (developer aid)", .func = cmd_touchtest},
+        {.command = "gt911", .help = "Dump the touch controller configuration (developer aid)", .func = cmd_gt911},
         {.command = "reload", .help = "Reload the screens from openHAB now", .func = cmd_reload},
         {.command = "reboot", .help = "Restart the device", .func = cmd_reboot},
         {.command = "crash-test", .help = "crash-test abort|intwdt: crash on purpose to test crash reports", .func = cmd_crash_test},
