@@ -186,6 +186,7 @@ static esp_err_t api_settings_get(httpd_req_t *req)
     cJSON_AddNumberToObject(o, "dark_timeout_s", c->dark_timeout_s);
     cJSON_AddNumberToObject(o, "bl_ramp_ms", c->bl_ramp_ms);
     cJSON_AddBoolToObject(o, "night_mode", c->night_mode);
+    cJSON_AddBoolToObject(o, "compact", c->compact);
     hhmm(t, sizeof(t), c->night_start_min);
     cJSON_AddStringToObject(o, "night_start", t);
     hhmm(t, sizeof(t), c->night_end_min);
@@ -305,6 +306,14 @@ static esp_err_t api_settings_post(httpd_req_t *req)
             bad = "Night mode: true or false";
         } else {
             c.night_mode = cJSON_IsTrue(nm);
+        }
+    }
+    cJSON *cp = cJSON_GetObjectItemCaseSensitive(in, "compact");
+    if (!bad && cp) {
+        if (!cJSON_IsBool(cp)) {
+            bad = "Compact layout: true or false";
+        } else {
+            c.compact = cJSON_IsTrue(cp);
         }
     }
     // Secrets are write-only: a non-empty value replaces the stored one; "*_clear" empties it.

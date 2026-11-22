@@ -69,6 +69,7 @@ Verified on 2026-11-22 (MAC 3c:84:27:29:36:20, "SC01Panel"): display orientation
   - when the item or rule registry changes (SSE `ItemAddedEvent`, `ItemUpdatedEvent`, `ItemRemovedEvent`, and the same for rules). Re-tagging an item or rule in openHAB therefore changes the panel within seconds. Changing only `wallpanel` metadata publishes no event (openHAB 5.2), so it shows up with the 10-minute reload, or at once with the console command `reload`.
 - **REQ-SCR-6:** you switch screens with a bottom tab bar showing the screen titles. Swiping left and right also works.
 - **REQ-SCR-7:** after 60 s without a touch, the panel returns to the home screen.
+- **REQ-SCR-8:** compact layout (setting `compact`, off by default; web UI "Compact layout", console `set compact on|off`, applied without a restart). A screen whose tiles do not fit at the normal size gets the grid that fits them all with the largest tiles (e.g. 9 tiles on 800×480: 5×2 of 150×176). Fonts, padding and buttons shrink with the tile; screens that already fit keep the normal size. Below 72×56 px per tile the page scrolls instead.
 
 ### 3.1 Tile types
 

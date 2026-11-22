@@ -39,6 +39,7 @@ typedef struct {
     // New fields go at the end: an older, shorter stored record still loads (the rest
     // keeps its defaults).
     uint16_t bl_ramp_ms;                 // backlight soft start/stop, 0 = switch hard
+    bool compact;                        // REQ-SCR-8: shrink tiles so each screen fits without scrolling
 } wp_cfg_t;
 
 typedef struct {

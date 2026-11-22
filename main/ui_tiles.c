@@ -72,12 +72,20 @@ typedef struct {
     int shown_alert;
 } status_ui_t;
 
+// Tile geometry of one screen: the normal size, or smaller in the compact layout.
+typedef struct {
+    int w, h, pad;
+    const lv_font_t *text, *big;
+    int btn_h, roller_w, setpt_w;
+} geom_t;
+
 static lv_obj_t *s_parent, *s_status_box, *s_tv, *s_overlay;
 static tile_ui_t *s_tiles;               // PSRAM
 static int s_ntiles;
 static status_ui_t s_status[MAX_STATUS];
 static int s_nstatus;
 static uint32_t s_built_version;
+static bool s_built_compact;
 static volatile bool s_dirty_model = true, s_dirty_state = true, s_dirty_conn = true;
 static bool s_went_home;
 
@@ -251,7 +259,7 @@ static lv_obj_t *mk_label(lv_obj_t *par, const lv_font_t *font, uint32_t color)
     return l;
 }
 
-static lv_obj_t *mk_button(lv_obj_t *par, const char *text, int w, int h)
+static lv_obj_t *mk_button(lv_obj_t *par, const char *text, int w, int h, const lv_font_t *font)
 {
     lv_obj_t *b = lv_button_create(par);
     lv_obj_set_size(b, w, h);
@@ -259,7 +267,7 @@ static lv_obj_t *mk_button(lv_obj_t *par, const char *text, int w, int h)
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
     lv_obj_set_style_radius(b, 10, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
-    lv_obj_t *l = mk_label(b, FONT_TEXT, COL_TEXT);
+    lv_obj_t *l = mk_label(b, font, COL_TEXT);
     lv_label_set_text(l, text);
     lv_obj_center(l);
     return b;
@@ -292,17 +300,17 @@ static const char *icon_for(const wp_tile_t *t, bool all_off)
     }
 }
 
-static lv_obj_t *mk_tile(lv_obj_t *page, tile_ui_t *u, bool clickable)
+static lv_obj_t *mk_tile(lv_obj_t *page, tile_ui_t *u, bool clickable, const geom_t *g)
 {
     lv_obj_t *o = lv_obj_create(page);
     lv_obj_remove_style_all(o);
-    lv_obj_set_size(o, TILE_W, TILE_H);
+    lv_obj_set_size(o, g->w, g->h);
     lv_obj_set_style_radius(o, 14, 0);
     lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(o, lv_color_hex(COL_TILE), 0);
     lv_obj_set_style_border_color(o, lv_color_hex(COL_WARN), 0);
     lv_obj_set_style_border_width(o, 0, 0);
-    lv_obj_set_style_pad_all(o, TILE_PAD, 0);
+    lv_obj_set_style_pad_all(o, g->pad, 0);
     lv_obj_set_scrollable(o, false);
     if (clickable) {
         lv_obj_set_clickable(o, true);
@@ -316,7 +324,7 @@ static lv_obj_t *mk_tile(lv_obj_t *page, tile_ui_t *u, bool clickable)
     return o;
 }
 
-static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
+static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t, const geom_t *g)
 {
     u->type = U_TILE;
     u->kind = t->kind;
@@ -331,35 +339,35 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
 
     bool clickable = t->kind == WP_TILE_SWITCH || t->kind == WP_TILE_DIMMER || t->kind == WP_TILE_COLOR ||
                      t->kind == WP_TILE_SCENE;
-    lv_obj_t *o = mk_tile(page, u, clickable);
+    lv_obj_t *o = mk_tile(page, u, clickable, g);
     const char *sym = icon_for(t, false);
 
-    u->label = mk_label(o, FONT_TEXT, COL_TEXT);
+    u->label = mk_label(o, g->text, COL_TEXT);
     lv_label_set_text(u->label, t->label);
-    lv_obj_set_width(u->label, TILE_W - 2 * TILE_PAD);
+    lv_obj_set_width(u->label, g->w - 2 * g->pad);
     lv_label_set_long_mode(u->label, LV_LABEL_LONG_MODE_DOTS);
     lv_label_set_max_lines(u->label, 2);   // longer labels end in "..."
 
     if (sym[0] && t->kind != WP_TILE_SETPOINT) {
-        u->icon = mk_label(o, FONT_BIG, COL_MUTED);
+        u->icon = mk_label(o, g->big, COL_MUTED);
         lv_label_set_text(u->icon, sym);
         lv_obj_align(u->icon, LV_ALIGN_TOP_LEFT, 0, 0);
     }
 
     switch (t->kind) {
     case WP_TILE_SWITCH:
-        u->value = mk_label(o, FONT_TEXT, COL_MUTED);
+        u->value = mk_label(o, g->text, COL_MUTED);
         lv_obj_align(u->value, LV_ALIGN_TOP_RIGHT, 0, 4);
         lv_obj_align(u->label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         break;
     case WP_TILE_DIMMER:
     case WP_TILE_COLOR:
-        u->value = mk_label(o, FONT_TEXT, COL_MUTED);
+        u->value = mk_label(o, g->text, COL_MUTED);
         lv_obj_align(u->value, LV_ALIGN_TOP_RIGHT, 0, 4);
         lv_obj_align(u->label, LV_ALIGN_LEFT_MID, 0, -4);
         u->slider = lv_slider_create(o);
         lv_slider_set_range(u->slider, 0, 100);
-        lv_obj_set_size(u->slider, TILE_W - 40, 14);
+        lv_obj_set_size(u->slider, g->w - 2 * g->pad - 12, 14);
         lv_obj_align(u->slider, LV_ALIGN_BOTTOM_MID, 0, -8);
         // readable on both the dark (off) and the amber (on) tile
         lv_obj_set_style_bg_color(u->slider, lv_color_hex(COL_DARK), LV_PART_MAIN);
@@ -372,14 +380,14 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
         lv_obj_add_event_cb(u->slider, on_slider_released, LV_EVENT_RELEASED, u);
         break;
     case WP_TILE_ROLLER: {
-        u->value = mk_label(o, FONT_TEXT, COL_MUTED);
+        u->value = mk_label(o, g->text, COL_MUTED);
         lv_obj_align(u->value, LV_ALIGN_TOP_RIGHT, 0, 4);
         lv_obj_align(u->label, LV_ALIGN_LEFT_MID, 0, -12);
         static const char *cmds[] = {"UP", "STOP", "DOWN"};
         static const char *syms[] = {LV_SYMBOL_UP, LV_SYMBOL_STOP, LV_SYMBOL_DOWN};
         for (int i = 0; i < 3; i++) {
-            lv_obj_t *b = mk_button(o, syms[i], ROLLER_BTN_W, BTN_H);
-            lv_obj_align(b, LV_ALIGN_BOTTOM_LEFT, i * (ROLLER_BTN_W + 8), 0);
+            lv_obj_t *b = mk_button(o, syms[i], g->roller_w, g->btn_h, g->text);
+            lv_obj_align(b, LV_ALIGN_BOTTOM_LEFT, i * (g->roller_w + 6), 0);
             lv_obj_set_user_data(b, (void *)cmds[i]);
             lv_obj_add_event_cb(b, on_roller_btn, LV_EVENT_CLICKED, u);
         }
@@ -387,10 +395,10 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
     }
     case WP_TILE_SETPOINT: {
         lv_obj_align(u->label, LV_ALIGN_TOP_LEFT, 0, 0);
-        u->value = mk_label(o, FONT_BIG, COL_TEXT);
+        u->value = mk_label(o, g->big, COL_TEXT);
         lv_obj_align(u->value, LV_ALIGN_CENTER, 0, 8);
         for (int i = 0; i < 2; i++) {
-            lv_obj_t *b = mk_button(o, i ? LV_SYMBOL_PLUS : LV_SYMBOL_MINUS, SETPT_BTN_W, BTN_H);
+            lv_obj_t *b = mk_button(o, i ? LV_SYMBOL_PLUS : LV_SYMBOL_MINUS, g->setpt_w, g->btn_h, g->text);
             lv_obj_align(b, i ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_BOTTOM_LEFT, 0, 0);
             lv_obj_set_user_data(b, (void *)(intptr_t)(i ? 1 : -1));
             lv_obj_add_event_cb(b, on_setpoint_btn, LV_EVENT_CLICKED, u);
@@ -406,29 +414,71 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
         lv_obj_set_style_text_color(u->label, lv_color_hex(COL_MUTED), 0);
         lv_obj_align(u->label, LV_ALIGN_TOP_LEFT, 0, 0);
         if (u->icon) lv_obj_set_hidden(u->icon, true);
-        u->value = mk_label(o, FONT_BIG, COL_TEXT);
-        lv_obj_set_width(u->value, TILE_W - 2 * TILE_PAD);
+        u->value = mk_label(o, g->big, COL_TEXT);
+        lv_obj_set_width(u->value, g->w - 2 * g->pad);
         lv_label_set_long_mode(u->value, LV_LABEL_LONG_MODE_WRAP);
         lv_obj_align(u->value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         break;
     }
 }
 
-static void build_all_off(lv_obj_t *page, tile_ui_t *u, int screen)
+static void build_all_off(lv_obj_t *page, tile_ui_t *u, int screen, const geom_t *g)
 {
     memset(u, 0, sizeof(*u));
     u->type = U_ALL_OFF;
     u->screen = screen;
     u->index = -1;
     u->shown_look = -1;
-    lv_obj_t *o = mk_tile(page, u, true);
+    lv_obj_t *o = mk_tile(page, u, true, g);
     lv_obj_set_style_bg_color(o, lv_color_hex(COL_SCENE), 0);
-    u->icon = mk_label(o, FONT_BIG, COL_ACCENT);
+    u->icon = mk_label(o, g->big, COL_ACCENT);
     lv_label_set_text(u->icon, LV_SYMBOL_POWER);
     lv_obj_align(u->icon, LV_ALIGN_TOP_LEFT, 0, 0);
-    u->label = mk_label(o, FONT_TEXT, COL_TEXT);
+    u->label = mk_label(o, g->text, COL_TEXT);
     lv_label_set_text(u->label, "All lights off");
     lv_obj_align(u->label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+}
+
+static geom_t normal_geom(void)
+{
+    return (geom_t){TILE_W, TILE_H, TILE_PAD, FONT_TEXT, FONT_BIG, BTN_H, ROLLER_BTN_W, SETPT_BTN_W};
+}
+
+// REQ-SCR-8: the grid that shows n tiles in the page area (w x h) with the largest
+// tiles. Screens that already fit at the normal size keep it; tiles never grow.
+static geom_t compact_geom(int n, int w, int h)
+{
+    geom_t g = normal_geom();
+    int rows_normal = (h - GAP) / (TILE_H + GAP);
+    if (n <= TILE_COLS * rows_normal) return g;
+    int best_w = 0, best_h = 0, best = 0;
+    for (int cols = 1; cols <= n; cols++) {
+        int rows = (n + cols - 1) / cols;
+        int tw = (w - (cols + 1) * GAP) / cols, th = (h - (rows + 1) * GAP) / rows;
+        if (tw > TILE_W) tw = TILE_W;
+        if (th > TILE_H) th = TILE_H;
+        int score = tw < th ? tw : th;
+        if (score > best) {
+            best = score;
+            best_w = tw;
+            best_h = th;
+        }
+    }
+    // Too many tiles to fit usably: keep a minimum size and let the page scroll.
+    g.w = best_w < 72 ? 72 : best_w;
+    g.h = best_h < 56 ? 56 : best_h;
+    int m = g.w < g.h ? g.w : g.h;
+    g.pad = m >= 130 ? TILE_PAD : m >= 90 ? 8 : 6;
+    g.text = (m >= 140 && FONT_TEXT == &lv_font_montserrat_20) ? &lv_font_montserrat_20 :
+             m >= 90 ? &lv_font_montserrat_16 : &lv_font_montserrat_14;
+    g.big = (g.h >= 130 && FONT_BIG == &lv_font_montserrat_28) ? &lv_font_montserrat_28 :
+            g.h >= 80 ? &lv_font_montserrat_20 : &lv_font_montserrat_16;
+    int inner_w = g.w - 2 * g.pad, inner_h = g.h - 2 * g.pad;
+    g.btn_h = inner_h / 3 < BTN_H ? inner_h / 3 : BTN_H;
+    if (g.btn_h < 24) g.btn_h = 24;
+    g.roller_w = (inner_w - 12) / 3 < ROLLER_BTN_W ? (inner_w - 12) / 3 : ROLLER_BTN_W;
+    g.setpt_w = (inner_w - 8) / 2 < SETPT_BTN_W ? (inner_w - 8) / 2 : SETPT_BTN_W;
+    return g;
 }
 
 static void style_tab_bar(void)
@@ -477,8 +527,13 @@ static void rebuild(void)
     lv_obj_move_background(s_tv);
 
     int active = 0;
+    bool compact = wp_config_get()->compact;
+    // page area: below the status bar, above the tab bar (hidden with a single screen)
+    int area_h = SCR_H - BAR_H - (m->screen_count > 1 ? TAB_H : 0);
     for (int si = 0; si < m->screen_count; si++) {
         const wp_oh_screen_t *s = &m->screens[si];
+        int n = s->count + (s->lights >= 2 ? 1 : 0);
+        geom_t g = compact ? compact_geom(n, SCR_W, area_h) : normal_geom();
         if (!strcmp(s->tag, active_tag)) active = si;
         lv_obj_t *page = lv_tabview_add_tab(s_tv, s->title);
         lv_obj_set_style_pad_all(page, GAP, 0);
@@ -487,7 +542,7 @@ static void rebuild(void)
         lv_obj_set_flex_flow(page, LV_FLEX_FLOW_ROW_WRAP);
         lv_obj_set_scroll_dir(page, LV_DIR_VER);
         if (s->lights >= 2 && s_ntiles < MAX_UI_TILES) {
-            build_all_off(page, &s_tiles[s_ntiles++], si);
+            build_all_off(page, &s_tiles[s_ntiles++], si, &g);
         }
         for (int ti = 0; ti < s->count && s_ntiles < MAX_UI_TILES; ti++) {
             tile_ui_t *u = &s_tiles[s_ntiles++];
@@ -496,7 +551,7 @@ static void rebuild(void)
             u->index = ti;
             u->shown_look = -1;
             u->shown_slider = -2;
-            build_tile(page, u, &s->tiles[ti]);
+            build_tile(page, u, &s->tiles[ti], &g);
         }
         if (s->count == 0) {
             lv_obj_t *l = mk_label(page, FONT_TEXT, COL_MUTED);
@@ -511,6 +566,7 @@ static void rebuild(void)
         st->label = mk_label(s_status_box, FONT_TEXT, COL_TEXT);
     }
     s_built_version = m->version;
+    s_built_compact = compact;
     wp_oh_model_unlock();
 
     style_tab_bar();
@@ -706,6 +762,8 @@ void tiles_tick(void)
         s_dirty_model = false;
         if (v != 0 && v != s_built_version) rebuild();
     }
+    if (s_built_version && wp_config_get()->compact != s_built_compact) rebuild();   // console 'set compact'
+
     if (!s_built_version) return;
     if (s_dirty_conn) {
         s_dirty_conn = false;

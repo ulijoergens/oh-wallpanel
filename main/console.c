@@ -86,7 +86,7 @@ static int cmd_show(int argc, char **argv)
     printf("home_s      %u\ndark_s      %u\nnight       %s %02u:%02u-%02u:%02u\n", c->home_timeout_s, c->dark_timeout_s,
            c->night_mode ? "on" : "off", c->night_start_min / 60, c->night_start_min % 60, c->night_end_min / 60,
            c->night_end_min % 60);
-    printf("bl_ramp_ms  %u\n", c->bl_ramp_ms);
+    printf("bl_ramp_ms  %u\ncompact     %s\n", c->bl_ramp_ms, c->compact ? "on" : "off");
     return 0;
 }
 
@@ -104,7 +104,7 @@ static int cmd_set(int argc, char **argv)
 {
     if (argc < 2) {
         printf("usage: set <key> [value...]   keys: name ssid pass oh_url oh_token screens status_tag tz "
-               "home_s dark_s bl_ramp_ms night (on|off) night_start night_end (HH:MM)\n");
+               "home_s dark_s bl_ramp_ms night compact (on|off) night_start night_end (HH:MM)\n");
         return 1;
     }
     // Join the remaining arguments so values may contain spaces (e.g. SSIDs).
@@ -135,6 +135,7 @@ static int cmd_set(int argc, char **argv)
     else if (!strcmp(k, "dark_s")) c.dark_timeout_s = (uint16_t)atoi(val);
     else if (!strcmp(k, "bl_ramp_ms")) c.bl_ramp_ms = (uint16_t)atoi(val);
     else if (!strcmp(k, "night")) c.night_mode = !strcmp(val, "on") || !strcmp(val, "1");
+    else if (!strcmp(k, "compact")) c.compact = !strcmp(val, "on") || !strcmp(val, "1");
     else if (!strcmp(k, "night_start") && sscanf(val, "%u:%u", &hh, &mm) == 2 && hh < 24 && mm < 60) c.night_start_min = hh * 60 + mm;
     else if (!strcmp(k, "night_end") && sscanf(val, "%u:%u", &hh, &mm) == 2 && hh < 24 && mm < 60) c.night_end_min = hh * 60 + mm;
     else {
