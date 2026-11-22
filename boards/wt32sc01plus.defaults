@@ -1,0 +1,9 @@
+# Wireless-Tag WT32-SC01 Plus: 16 MB flash, 2 MB quad PSRAM, 480x320 ST7796 on an i80 bus
+CONFIG_WP_BOARD_WT32_SC01_PLUS=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_SPIRAM_MODE_QUAD=y
+CONFIG_LCD_I80_PCLK_MHZ=20
+
+# LVGL draw buffers (internal, DMA-capable): 2 x 480 x 40 x 2 bytes. No RGB bounce
+# buffers here, so there is room for taller stripes than on the Waveshare board.
+CONFIG_LVGL_PORT_BUF_HEIGHT=40

@@ -7,7 +7,6 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "esp_lcd_panel_ops.h"
-#include "esp_lcd_panel_rgb.h"
 #include "esp_lcd_touch.h"
 #include "esp_timer.h"
 #include "esp_log.h"
@@ -15,12 +14,17 @@
 #include "bsp/lvgl_port.h"
 #include "bsp/board.h"
 
+#if BOARD_LCD_RGB
+#include "esp_lcd_panel_rgb.h"
 
 IRAM_ATTR static bool rgb_lcd_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t *edata,
  void *user_ctx)
 {
     return lvgl_port_notify_rgb_vsync();
 }
+#else
+static lv_display_t *s_disp;   // for the i80 transfer-done callback
+#endif
 
 static const char *TAG = "lv_port";                      // Tag for logging
 static SemaphoreHandle_t lvgl_mux;                       // LVGL mutex for synchronization
@@ -421,6 +425,11 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
 
     /* Just copy data from the color map to the RGB frame buffer */
     esp_lcd_panel_draw_bitmap(panel_handle, offsetx1, offsety1, offsetx2 + 1, offsety2 + 1, color_map);
+#if BOARD_LCD_I80
+    /* i80: the DMA reads straight from LVGL's buffer; lvgl_port_notify_flush_done()
+     * (transfer done) hands it back to LVGL. */
+    return;
+#endif
     #if LVGL_VERSION_MAJOR >= 9
     bool is_last = lv_display_flush_is_last(disp);
     #else
@@ -666,6 +675,7 @@ esp_err_t lvgl_port_init(esp_lcd_panel_handle_t lcd_handle, esp_lcd_touch_handle
 
     assert(disp); // Ensure the display initialization was successful
 
+#if BOARD_LCD_RGB
     esp_lcd_rgb_panel_event_callbacks_t cbs = {
     #if RGB_BOUNCE_BUFFER_SIZE > 0
         .on_frame_buf_complete = rgb_lcd_on_vsync_event,
@@ -674,6 +684,9 @@ esp_err_t lvgl_port_init(esp_lcd_panel_handle_t lcd_handle, esp_lcd_touch_handle
     #endif
     };
     ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(lcd_handle, &cbs, NULL));
+#else
+    s_disp = disp;
+#endif
 
 
     if (tp_handle) {
@@ -742,3 +755,11 @@ bool lvgl_port_notify_rgb_vsync(void)
 }
 
 
+
+#if BOARD_LCD_I80
+bool lvgl_port_notify_flush_done(void)
+{
+    if (s_disp) lv_display_flush_ready(s_disp);
+    return false;
+}
+#endif

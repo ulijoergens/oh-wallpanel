@@ -1,7 +1,7 @@
 # oh-wallpanel: Functional Specification (draft v0.1)
 
 The owner's decisions are listed below. The defaults this draft proposed were all confirmed by the owner on 2026-11-21.
-- Hardware: Waveshare ESP32-S3-Touch-LCD-4.3.
+- Hardware: Waveshare ESP32-S3-Touch-LCD-4.3; since 2026-11-22 also the Wireless-Tag WT32-SC01 Plus (section 2.1).
 - Firmware: ESP-IDF + LVGL.
 - openHAB link: REST + SSE, with no MQTT.
 - Purpose: a wall controller.
@@ -40,6 +40,21 @@ Out of scope for v1: cameras/video, charts, audio, more than one openHAB server.
 - **REQ-HW-2:** the backlight can only be switched on and off, because the CH422G has no PWM. Dimming would need a hardware modification and is out of scope for v1.
 - **REQ-HW-5:** switching the backlight in one step dips the board's 3.3 V below the brownout level (2.44 V) on weak USB power, which resets the panel. The backlight is therefore faded on and off with a 1 ms software PWM on the CH422G over `bl_ramp_ms` (setting, default 200 ms, 0 = switch hard for a strong 5 V supply). Tested 2026-11-22 on a notebook dock: 20 switches without reset at 200 ms, brownout after 5 switches at 0.
 - **REQ-HW-3:** all I2C transfers stay within the controller FIFO. This is the lesson from the sensor-actor project, where longer transfers corrupted the ESP-IDF 6.1 i2c_master driver state.
+
+### 2.1 Second board: WT32-SC01 Plus
+
+The Wireless-Tag WT32-SC01 Plus is an ESP32-S3 (16 MB flash, 2 MB quad PSRAM) with a 3.5" 320×480 ST7796 LCD, an FT6336 touch controller and native USB. The panel runs it in landscape at 480×320.
+
+Verified on 2026-11-22 (MAC 3c:84:27:29:36:20, "SC01Panel"): display orientation and colours, touch mapping over the whole screen, tiles, screen swipes, backlight timeout and wake, OTA update. The factory firmware is backed up as `sc01plus-factory-16MB.bin`.
+
+| Function | Connection |
+|---|---|
+| ST7796 LCD, 8-bit i80 | D0–D7 = 9, 46, 3, 8, 18, 17, 16, 15; WR 47; DC 0 (also BOOT); RST 4; TE 48 (unused); CS tied low |
+| Backlight | GPIO 45, LEDC PWM at 20 kHz |
+| FT6336 touch | I2C SDA 6, SCL 5, address 0x38; INT 7 (unused, polled); reset shared with the LCD (GPIO 4) |
+
+- **REQ-HW-6:** the board is chosen at build time: Kconfig `WP_BOARD` and `boards/<board>.defaults`, selected with `idf.py -D WP_BOARD=waveshare43|wt32sc01plus` (default waveshare43). Everything above `bsp/board.h` (`board_display_init`, `board_backlight`, `board_framebuffer`) is board independent. The UI derives its geometry from the resolution (`main/ui_layout.h`): 4×2 tiles on 800×480 and 3×2 tiles with smaller fonts on 480×320.
+- **REQ-HW-7:** the ST7796 keeps its own frame memory, so there is no PSRAM frame buffer. LVGL renders 40-line stripes into two internal DMA buffers, which the i80 DMA sends straight to the panel (bytes swapped by the LCD peripheral). The backlight fades with the LEDC fade unit over `bl_ramp_ms`. The console command `fbdump` renders the active screen with `lv_snapshot` instead of reading a frame buffer.
 
 ## 3. Screens from openHAB tags
 
@@ -122,7 +137,8 @@ The tile type is chosen automatically from the item type and its semantic tags. 
 
 - ESP-IDF v6.1 (`/workspace/esp`), target esp32s3, LVGL 9 via esp_lvgl_port.
 - Repo: /workspace/oh-wallpanel, on GitHub as `ulijoergens/oh-wallpanel`. CI builds in GitHub Actions with `espressif/idf:v6.1`.
-- Partitions (`partitions.csv`): 8 MB flash, with two OTA slots of 3 MB each, NVS (24 KB) and a 64 KB coredump partition.
+- Partitions (`partitions.csv`): 8 MB flash, with two OTA slots of 3 MB each, NVS (24 KB) and a 64 KB coredump partition. The WT32-SC01 Plus uses the same table; its upper 8 MB stay unused.
+- One build directory per board: `idf.py build` (Waveshare, `build/`, `sdkconfig`) and `idf.py -B build-wt32sc01plus -D WP_BOARD=wt32sc01plus build` (`sdkconfig.wt32sc01plus`). CI builds both and uploads one artifact per board.
 
 ## 8. Milestones
 

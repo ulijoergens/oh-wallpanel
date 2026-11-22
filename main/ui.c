@@ -8,10 +8,13 @@
 #include "bsp/board.h"
 #include "bsp/lvgl_port.h"
 #include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "lvgl.h"
 #include "src/libs/qrcode/qrcodegen.h"
 #include "time_sync.h"
+#include "ui_layout.h"
 #include "ui_tiles.h"
 #include "wifi_mgr.h"
 #include "wp_config.h"
@@ -19,7 +22,6 @@
 
 static const char *TAG = "ui";
 
-#define BAR_H      40
 #define COL_BG     0x101418
 #define COL_BAR    0x1c232b
 #define COL_TEXT   0xe8eef4
@@ -50,8 +52,6 @@ static bool ui_lock(void)
 static lv_obj_t *s_wake;    // catches the waking touch while the screen is dark
 static void on_wake_touch(lv_event_t *e);
 static uint16_t *s_qr_buf;   // RGB565 canvas buffer in PSRAM
-
-#define QR_PX 280
 
 // Draws text as a QR code into an RGB565 canvas, using the qrcodegen library bundled with
 // LVGL. LVGL 9.6's lv_qrcode widget is not used: rendering its 1-bit (I1) canvas hung the
@@ -91,7 +91,7 @@ static lv_obj_t *panel(lv_obj_t *scr)
 {
     lv_obj_t *p = lv_obj_create(scr);
     lv_obj_remove_style_all(p);
-    lv_obj_set_size(p, 800, 480 - BAR_H);
+    lv_obj_set_size(p, SCR_W, SCR_H - BAR_H);
     lv_obj_set_pos(p, 0, BAR_H);
     lv_obj_set_scrollable(p, false);
     return p;
@@ -107,48 +107,52 @@ static void build(void)
     // Status bar (REQ-STAT-1): clock, up to four status items, WiFi and openHAB icons.
     lv_obj_t *bar = lv_obj_create(scr);
     lv_obj_remove_style_all(bar);
-    lv_obj_set_size(bar, 800, BAR_H);
+    lv_obj_set_size(bar, SCR_W, BAR_H);
     lv_obj_set_style_bg_color(bar, lv_color_hex(COL_BAR), 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-    s_clock = label(bar, &lv_font_montserrat_20, COL_TEXT);
+    s_clock = label(bar, FONT_TEXT, COL_TEXT);
     lv_obj_align(s_clock, LV_ALIGN_LEFT_MID, 16, 0);
     lv_label_set_text(s_clock, "--:--");
-    s_oh = label(bar, &lv_font_montserrat_20, COL_MUTED);
+    s_oh = label(bar, FONT_TEXT, COL_MUTED);
     lv_label_set_text(s_oh, LV_SYMBOL_HOME);
     lv_obj_align(s_oh, LV_ALIGN_RIGHT_MID, -16, 0);
-    s_wifi = label(bar, &lv_font_montserrat_20, COL_MUTED);
+    s_wifi = label(bar, FONT_TEXT, COL_MUTED);
     lv_label_set_text(s_wifi, LV_SYMBOL_WIFI);
-    lv_obj_align(s_wifi, LV_ALIGN_RIGHT_MID, -52, 0);
+    lv_obj_align(s_wifi, LV_ALIGN_RIGHT_MID, -16 - ICON_GAP, 0);
     s_status_box = lv_obj_create(bar);
     lv_obj_remove_style_all(s_status_box);
-    lv_obj_set_size(s_status_box, 800 - 96 - 96, BAR_H);
-    lv_obj_set_pos(s_status_box, 96, 0);
+    lv_obj_set_size(s_status_box, SCR_W - 2 * BAR_SIDE, BAR_H);
+    lv_obj_set_pos(s_status_box, BAR_SIDE, 0);
     lv_obj_set_flex_flow(s_status_box, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(s_status_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(s_status_box, 28, 0);
+    lv_obj_set_style_pad_column(s_status_box, STATUS_GAP, 0);
     lv_obj_set_scrollable(s_status_box, false);
 
     // Setup screen (REQ-NET-2): AP name and a QR code that joins it.
     s_setup = panel(scr);
-    lv_obj_t *t = label(s_setup, &lv_font_montserrat_28, COL_TEXT);
+    lv_obj_t *t = label(s_setup, FONT_BIG, COL_TEXT);
     lv_label_set_text(t, "Set up this panel");
-    lv_obj_set_pos(t, 40, 40);
-    lv_obj_t *steps = label(s_setup, &lv_font_montserrat_20, COL_TEXT);
-    lv_label_set_text(steps, "1.  Scan the QR code with your phone,\n     or join this WiFi network:");
-    lv_obj_set_pos(steps, 40, 100);
-    s_setup_ap = label(s_setup, &lv_font_montserrat_28, COL_WARN);
-    lv_obj_set_pos(s_setup_ap, 80, 165);
-    s_setup_hint = label(s_setup, &lv_font_montserrat_20, COL_TEXT);
-    lv_obj_set_pos(s_setup_hint, 40, 220);
-    lv_obj_set_width(s_setup_hint, 440);
+    lv_obj_set_pos(t, MARGIN, MARGIN);
+    const int text_w = SCR_W - QR_PX - 3 * MARGIN;   // left of the QR code
+    lv_obj_t *steps = label(s_setup, FONT_TEXT, COL_TEXT);
+    lv_label_set_text(steps, "1.  Scan the QR code with your phone, or join this WiFi network:");
+    lv_obj_set_width(steps, text_w);
+    lv_label_set_long_mode(steps, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_align_to(steps, t, LV_ALIGN_OUT_BOTTOM_LEFT, 0, MARGIN / 2 + 8);
+    s_setup_ap = label(s_setup, FONT_BIG, COL_WARN);
+    lv_label_set_text(s_setup_ap, " ");
+    lv_obj_align_to(s_setup_ap, steps, LV_ALIGN_OUT_BOTTOM_LEFT, MARGIN, MARGIN / 2);
+    s_setup_hint = label(s_setup, FONT_TEXT, COL_TEXT);
+    lv_obj_set_width(s_setup_hint, text_w);
     lv_label_set_long_mode(s_setup_hint, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_align_to(s_setup_hint, s_setup_ap, LV_ALIGN_OUT_BOTTOM_LEFT, -MARGIN, MARGIN / 2);
     s_qr_buf = heap_caps_malloc(QR_PX * QR_PX * 2, MALLOC_CAP_SPIRAM);
     s_qr = lv_canvas_create(s_setup);
     if (s_qr_buf) {
         for (int i = 0; i < QR_PX * QR_PX; i++) s_qr_buf[i] = 0xFFFF;
         lv_canvas_set_buffer(s_qr, s_qr_buf, QR_PX, QR_PX, LV_COLOR_FORMAT_RGB565);
     }
-    lv_obj_set_pos(s_qr, 490, 50);
+    lv_obj_set_pos(s_qr, SCR_W - QR_PX - MARGIN + 10, MARGIN + 10);
 
     // Tile screens (milestone 4), shown once openHAB screens are loaded.
     s_tiles_panel = panel(scr);
@@ -157,17 +161,17 @@ static void build(void)
 
     // Info screen: on WiFi but no screens loaded yet (openHAB not set up or unreachable).
     s_info = panel(scr);
-    s_info_name = label(s_info, &lv_font_montserrat_28, COL_TEXT);
-    lv_obj_set_pos(s_info_name, 40, 40);
-    s_info_body = label(s_info, &lv_font_montserrat_20, COL_TEXT);
-    lv_obj_set_pos(s_info_body, 40, 100);
-    lv_obj_set_width(s_info_body, 720);
+    s_info_name = label(s_info, FONT_BIG, COL_TEXT);
+    lv_obj_set_pos(s_info_name, MARGIN, MARGIN);
+    s_info_body = label(s_info, FONT_TEXT, COL_TEXT);
+    lv_obj_set_pos(s_info_body, MARGIN, MARGIN + (BAR_H * 3) / 2);
+    lv_obj_set_width(s_info_body, SCR_W - 2 * MARGIN);
     lv_label_set_long_mode(s_info_body, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_hidden(s_info, true);
 
     s_wake = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(s_wake);
-    lv_obj_set_size(s_wake, 800, 480);
+    lv_obj_set_size(s_wake, SCR_W, SCR_H);
     lv_obj_set_clickable(s_wake, true);
     lv_obj_add_event_cb(s_wake, on_wake_touch, LV_EVENT_ALL, NULL);
     lv_obj_set_hidden(s_wake, true);
@@ -181,18 +185,21 @@ static bool s_bl_ready;     // main turned the backlight on once (first frame dr
 static bool s_bl_on;
 static bool s_was_night;
 
-// Called in the LVGL task or under the (recursive) LVGL lock: the CH422G shares the
-// I2C bus with the touch controller, which the LVGL task polls.
+// Called in the LVGL task or under the (recursive) LVGL lock: on the Waveshare board the
+// CH422G shares the I2C bus with the touch controller, which the LVGL task polls.
 static void set_backlight(bool on)
 {
     if (on == s_bl_on) return;
-    esp_err_t err = waveshare_rgb_lcd_bl_ramp(on, wp_config_get()->bl_ramp_ms);
+    esp_err_t err = board_backlight(on, wp_config_get()->bl_ramp_ms);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "backlight %s failed: %s", on ? "on" : "off", esp_err_to_name(err));
         return;
     }
     s_bl_on = on;
     lv_obj_set_hidden(s_wake, on);
+    // Above everything else on the top layer (e.g. the touch test), or the waking tap
+    // lands there and the screen stays dark (2026-11-22).
+    if (!on) lv_obj_move_foreground(s_wake);
     ESP_LOGI(TAG, "screen %s", on ? "on" : "dark");
 }
 
@@ -304,7 +311,7 @@ esp_err_t ui_start(void)
 {
     esp_lcd_panel_handle_t panel = NULL;
     esp_lcd_touch_handle_t touch = NULL;
-    esp_err_t err = waveshare_esp32_s3_rgb_lcd_init(&panel, &touch);
+    esp_err_t err = board_display_init(&panel, &touch);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "display init failed: %s", esp_err_to_name(err));
         return err;
@@ -344,18 +351,48 @@ void ui_backlight_on(void)
     lvgl_port_unlock();
 }
 
+#if !BOARD_HAS_FRAMEBUFFER
+static lv_draw_buf_t *s_snap;
+static SemaphoreHandle_t s_snap_done;
+
+static void snapshot_cb(void *arg)
+{
+    s_snap = lv_snapshot_take(lv_screen_active(), LV_COLOR_FORMAT_RGB565);
+    xSemaphoreGive(s_snap_done);
+}
+#endif
+
 // Developer aid: prints the frame buffer as base64 of run-length pairs (u16 count, u16
 // RGB565 pixel, little endian) between FBDUMP-BEGIN/END lines. tools/fbdump.py turns it
 // into a PNG. The UI is mostly flat colour, so a screen is typically 20-60 KB.
 void ui_dump_framebuffer(void)
 {
     static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+#if BOARD_HAS_FRAMEBUFFER
     void *fbv = NULL;
-    if (!s_panel || esp_lcd_rgb_panel_get_frame_buffer(s_panel, 1, &fbv) != ESP_OK || !fbv) {
+    if (!s_panel || board_framebuffer(s_panel, &fbv) != ESP_OK || !fbv) {
         printf("no frame buffer\n");
         return;
     }
     const uint16_t *fb = fbv;
+#else
+    // The panel keeps its frame in its own memory: render the active screen instead
+    // (without the top layer, i.e. without the touch test).
+    // Rendering needs the LVGL task's stack (the console task overflowed, 2026-11-22).
+    if (!ui_lock()) return;
+    if (!s_snap_done) s_snap_done = xSemaphoreCreateBinary();
+    xSemaphoreTake(s_snap_done, 0);
+    s_snap = NULL;
+    lv_async_call(snapshot_cb, NULL);
+    lvgl_port_unlock();
+    lv_draw_buf_t *snap = xSemaphoreTake(s_snap_done, pdMS_TO_TICKS(5000)) == pdTRUE ? s_snap : NULL;
+    if (!snap || snap->header.stride != LCD_H_RES * 2) {
+        printf("snapshot failed\n");
+        if (snap) lv_draw_buf_destroy(snap);
+        return;
+    }
+    const uint16_t *fb = (const uint16_t *)snap->data;
+#endif
     const int n = LCD_H_RES * LCD_V_RES;
     esp_log_level_t lvl = esp_log_level_get("*");
     esp_log_level_set("*", ESP_LOG_NONE);   // log lines inside the dump would corrupt it
@@ -389,6 +426,9 @@ void ui_dump_framebuffer(void)
     }
     printf("FBDUMP-END\n");
     esp_log_level_set("*", lvl);
+#if !BOARD_HAS_FRAMEBUFFER
+    lv_draw_buf_destroy(snap);
+#endif
 }
 
 void ui_show_tab(int tab, int scroll_y)
@@ -468,20 +508,22 @@ void ui_touchtest(bool on)
     if (on && !s_tt_layer) {
         s_tt_layer = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(s_tt_layer);
-        lv_obj_set_size(s_tt_layer, 800, 480);
+        lv_obj_set_size(s_tt_layer, SCR_W, SCR_H);
         lv_obj_set_style_bg_color(s_tt_layer, lv_color_hex(0x000000), 0);
         lv_obj_set_style_bg_opa(s_tt_layer, LV_OPA_COVER, 0);
         lv_obj_set_clickable(s_tt_layer, true);   // swallow touches: nothing underneath reacts
-        for (int y = 0; y < 480; y += 80) {
-            for (int x = 0; x < 800; x += 100) {
+        const int dx = SCR_W / 8, dy = SCR_H / 6;
+        for (int y = 0; y < SCR_H; y += dy) {
+            for (int x = 0; x < SCR_W; x += dx) {
                 lv_obj_t *l = lv_label_create(s_tt_layer);
                 lv_obj_set_style_text_color(l, lv_color_hex(0x606870), 0);
-                lv_label_set_text_fmt(l, "+ %d,%d", x + 50, y + 40);
-                lv_obj_set_pos(l, x + 44, y + 30);
+                lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+                lv_label_set_text_fmt(l, "+ %d,%d", x + dx / 2, y + dy / 2);
+                lv_obj_set_pos(l, x + dx / 2 - 6, y + dy / 2 - 10);
             }
         }
         s_tt_label = lv_label_create(s_tt_layer);
-        lv_obj_set_style_text_font(s_tt_label, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_font(s_tt_label, FONT_BIG, 0);
         lv_obj_set_style_text_color(s_tt_label, lv_color_hex(0xffffff), 0);
         lv_label_set_text(s_tt_label, "Touch test: drag a finger around");
         lv_obj_align(s_tt_label, LV_ALIGN_CENTER, 0, 0);
@@ -527,6 +569,10 @@ static esp_err_t gt911_read(uint16_t reg, uint8_t *buf, int len)
 
 void ui_dump_gt911(void)
 {
+#if !CONFIG_WP_BOARD_WAVESHARE_43
+    printf("this board has no GT911\n");
+    return;
+#endif
     if (!s_touch) {
         printf("no touch controller\n");
         return;

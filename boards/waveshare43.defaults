@@ -1,0 +1,15 @@
+# Waveshare ESP32-S3-Touch-LCD-4.3: 8 MB flash, 8 MB octal PSRAM, 800x480 RGB panel
+CONFIG_WP_BOARD_WAVESHARE_43=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_SPIRAM_MODE_OCT=y
+
+# RGB LCD: bounce buffer against drift/underflow (REQ-HW-1)
+CONFIG_LCD_RGB_BOUNCE_BUFFER_MODE=y
+CONFIG_LCD_RGB_BOUNCE_BUFFER_HEIGHT=20
+# Not CONFIG_LCD_RGB_ISR_IRAM_SAFE: the bounce-buffer ISR then runs during flash
+# operations and reads the PSRAM framebuffer while the cache is off (crash, 2026-11-22).
+CONFIG_LCD_RGB_RESTART_IN_VSYNC=y
+
+# LVGL draw buffers
+# 10 lines: internal RAM went to the 32 KB instruction cache
+CONFIG_LVGL_PORT_BUF_HEIGHT=10

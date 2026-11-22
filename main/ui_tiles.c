@@ -3,6 +3,7 @@
 // The openHAB client calls our listener from its own tasks; the listener only sets flags.
 // tiles_tick() (LVGL task) then rebuilds or syncs from the model under its lock.
 #include "ui_tiles.h"
+#include "ui_layout.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -16,10 +17,6 @@
 
 static const char *TAG = "tiles";
 
-#define TAB_H        56
-#define GAP          8
-#define TILE_W       190                 // 4 per row: 4*190 + 5*8 = 800
-#define TILE_H       176
 #define MAX_UI_TILES ((WP_MAX_SCREENS) * (WP_MAX_TILES + 1))   // +1: "All off"
 #define MAX_STATUS   4                   // REQ-STAT-1
 #define PENDING_US   (3LL * 1000 * 1000) // REQ-TILE-5
@@ -262,7 +259,7 @@ static lv_obj_t *mk_button(lv_obj_t *par, const char *text, int w, int h)
     lv_obj_set_style_bg_color(b, lv_color_hex(COL_ACCENT), LV_STATE_PRESSED);
     lv_obj_set_style_radius(b, 10, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
-    lv_obj_t *l = mk_label(b, &lv_font_montserrat_20, COL_TEXT);
+    lv_obj_t *l = mk_label(b, FONT_TEXT, COL_TEXT);
     lv_label_set_text(l, text);
     lv_obj_center(l);
     return b;
@@ -305,7 +302,7 @@ static lv_obj_t *mk_tile(lv_obj_t *page, tile_ui_t *u, bool clickable)
     lv_obj_set_style_bg_color(o, lv_color_hex(COL_TILE), 0);
     lv_obj_set_style_border_color(o, lv_color_hex(COL_WARN), 0);
     lv_obj_set_style_border_width(o, 0, 0);
-    lv_obj_set_style_pad_all(o, 14, 0);
+    lv_obj_set_style_pad_all(o, TILE_PAD, 0);
     lv_obj_set_scrollable(o, false);
     if (clickable) {
         lv_obj_set_clickable(o, true);
@@ -337,27 +334,27 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
     lv_obj_t *o = mk_tile(page, u, clickable);
     const char *sym = icon_for(t, false);
 
-    u->label = mk_label(o, &lv_font_montserrat_20, COL_TEXT);
+    u->label = mk_label(o, FONT_TEXT, COL_TEXT);
     lv_label_set_text(u->label, t->label);
-    lv_obj_set_width(u->label, TILE_W - 28);
+    lv_obj_set_width(u->label, TILE_W - 2 * TILE_PAD);
     lv_label_set_long_mode(u->label, LV_LABEL_LONG_MODE_DOTS);
     lv_label_set_max_lines(u->label, 2);   // longer labels end in "..."
 
     if (sym[0] && t->kind != WP_TILE_SETPOINT) {
-        u->icon = mk_label(o, &lv_font_montserrat_28, COL_MUTED);
+        u->icon = mk_label(o, FONT_BIG, COL_MUTED);
         lv_label_set_text(u->icon, sym);
         lv_obj_align(u->icon, LV_ALIGN_TOP_LEFT, 0, 0);
     }
 
     switch (t->kind) {
     case WP_TILE_SWITCH:
-        u->value = mk_label(o, &lv_font_montserrat_20, COL_MUTED);
+        u->value = mk_label(o, FONT_TEXT, COL_MUTED);
         lv_obj_align(u->value, LV_ALIGN_TOP_RIGHT, 0, 4);
         lv_obj_align(u->label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         break;
     case WP_TILE_DIMMER:
     case WP_TILE_COLOR:
-        u->value = mk_label(o, &lv_font_montserrat_20, COL_MUTED);
+        u->value = mk_label(o, FONT_TEXT, COL_MUTED);
         lv_obj_align(u->value, LV_ALIGN_TOP_RIGHT, 0, 4);
         lv_obj_align(u->label, LV_ALIGN_LEFT_MID, 0, -4);
         u->slider = lv_slider_create(o);
@@ -375,14 +372,14 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
         lv_obj_add_event_cb(u->slider, on_slider_released, LV_EVENT_RELEASED, u);
         break;
     case WP_TILE_ROLLER: {
-        u->value = mk_label(o, &lv_font_montserrat_20, COL_MUTED);
+        u->value = mk_label(o, FONT_TEXT, COL_MUTED);
         lv_obj_align(u->value, LV_ALIGN_TOP_RIGHT, 0, 4);
         lv_obj_align(u->label, LV_ALIGN_LEFT_MID, 0, -12);
         static const char *cmds[] = {"UP", "STOP", "DOWN"};
         static const char *syms[] = {LV_SYMBOL_UP, LV_SYMBOL_STOP, LV_SYMBOL_DOWN};
         for (int i = 0; i < 3; i++) {
-            lv_obj_t *b = mk_button(o, syms[i], 48, 44);
-            lv_obj_align(b, LV_ALIGN_BOTTOM_LEFT, i * 56, 0);
+            lv_obj_t *b = mk_button(o, syms[i], ROLLER_BTN_W, BTN_H);
+            lv_obj_align(b, LV_ALIGN_BOTTOM_LEFT, i * (ROLLER_BTN_W + 8), 0);
             lv_obj_set_user_data(b, (void *)cmds[i]);
             lv_obj_add_event_cb(b, on_roller_btn, LV_EVENT_CLICKED, u);
         }
@@ -390,10 +387,10 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
     }
     case WP_TILE_SETPOINT: {
         lv_obj_align(u->label, LV_ALIGN_TOP_LEFT, 0, 0);
-        u->value = mk_label(o, &lv_font_montserrat_28, COL_TEXT);
+        u->value = mk_label(o, FONT_BIG, COL_TEXT);
         lv_obj_align(u->value, LV_ALIGN_CENTER, 0, 8);
         for (int i = 0; i < 2; i++) {
-            lv_obj_t *b = mk_button(o, i ? LV_SYMBOL_PLUS : LV_SYMBOL_MINUS, 72, 44);
+            lv_obj_t *b = mk_button(o, i ? LV_SYMBOL_PLUS : LV_SYMBOL_MINUS, SETPT_BTN_W, BTN_H);
             lv_obj_align(b, i ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_BOTTOM_LEFT, 0, 0);
             lv_obj_set_user_data(b, (void *)(intptr_t)(i ? 1 : -1));
             lv_obj_add_event_cb(b, on_setpoint_btn, LV_EVENT_CLICKED, u);
@@ -409,8 +406,8 @@ static void build_tile(lv_obj_t *page, tile_ui_t *u, const wp_tile_t *t)
         lv_obj_set_style_text_color(u->label, lv_color_hex(COL_MUTED), 0);
         lv_obj_align(u->label, LV_ALIGN_TOP_LEFT, 0, 0);
         if (u->icon) lv_obj_set_hidden(u->icon, true);
-        u->value = mk_label(o, &lv_font_montserrat_28, COL_TEXT);
-        lv_obj_set_width(u->value, TILE_W - 28);
+        u->value = mk_label(o, FONT_BIG, COL_TEXT);
+        lv_obj_set_width(u->value, TILE_W - 2 * TILE_PAD);
         lv_label_set_long_mode(u->value, LV_LABEL_LONG_MODE_WRAP);
         lv_obj_align(u->value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         break;
@@ -426,10 +423,10 @@ static void build_all_off(lv_obj_t *page, tile_ui_t *u, int screen)
     u->shown_look = -1;
     lv_obj_t *o = mk_tile(page, u, true);
     lv_obj_set_style_bg_color(o, lv_color_hex(COL_SCENE), 0);
-    u->icon = mk_label(o, &lv_font_montserrat_28, COL_ACCENT);
+    u->icon = mk_label(o, FONT_BIG, COL_ACCENT);
     lv_label_set_text(u->icon, LV_SYMBOL_POWER);
     lv_obj_align(u->icon, LV_ALIGN_TOP_LEFT, 0, 0);
-    u->label = mk_label(o, &lv_font_montserrat_20, COL_TEXT);
+    u->label = mk_label(o, FONT_TEXT, COL_TEXT);
     lv_label_set_text(u->label, "All lights off");
     lv_obj_align(u->label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 }
@@ -445,7 +442,7 @@ static void style_tab_bar(void)
         lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
         lv_obj_set_style_text_color(b, lv_color_hex(COL_MUTED), 0);
         lv_obj_set_style_text_color(b, lv_color_hex(COL_ACCENT), LV_STATE_CHECKED);
-        lv_obj_set_style_text_font(b, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_font(b, FONT_TEXT, 0);
         lv_obj_set_style_border_side(b, LV_BORDER_SIDE_TOP, LV_STATE_CHECKED);
         lv_obj_set_style_border_width(b, 3, LV_STATE_CHECKED);
         lv_obj_set_style_border_color(b, lv_color_hex(COL_ACCENT), LV_STATE_CHECKED);
@@ -502,7 +499,7 @@ static void rebuild(void)
             build_tile(page, u, &s->tiles[ti]);
         }
         if (s->count == 0) {
-            lv_obj_t *l = mk_label(page, &lv_font_montserrat_20, COL_MUTED);
+            lv_obj_t *l = mk_label(page, FONT_TEXT, COL_MUTED);
             lv_label_set_text_fmt(l, "No items or rules have the tag \"%s\" yet.", s->tag);
         }
     }
@@ -511,7 +508,7 @@ static void rebuild(void)
         st->index = i;
         st->shown[0] = '\0';
         st->shown_alert = -1;
-        st->label = mk_label(s_status_box, &lv_font_montserrat_20, COL_TEXT);
+        st->label = mk_label(s_status_box, FONT_TEXT, COL_TEXT);
     }
     s_built_version = m->version;
     wp_oh_model_unlock();
@@ -687,7 +684,7 @@ void tiles_init(lv_obj_t *parent, lv_obj_t *status_box)
     lv_obj_set_style_bg_color(s_overlay, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(s_overlay, LV_OPA_60, 0);
     lv_obj_set_clickable(s_overlay, true);   // swallows touches
-    lv_obj_t *l = mk_label(s_overlay, &lv_font_montserrat_28, COL_TEXT);
+    lv_obj_t *l = mk_label(s_overlay, FONT_BIG, COL_TEXT);
     lv_label_set_text(l, "openHAB offline");
     lv_obj_center(l);
     lv_obj_set_hidden(s_overlay, true);

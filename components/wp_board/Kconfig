@@ -1,5 +1,23 @@
-menu "Waveshare: ESP32 S3 Touch LCD 4.3 (A) Configuration"
+menu "Panel board"
+    choice WP_BOARD
+        prompt "Panel hardware"
+        default WP_BOARD_WAVESHARE_43
+        help
+            The panel the firmware is built for. Each board has its own sdkconfig defaults in
+            boards/<name>.defaults; build with idf.py -D WP_BOARD=<name>.
+        config WP_BOARD_WAVESHARE_43
+            bool "Waveshare ESP32-S3-Touch-LCD-4.3 (800x480 RGB, GT911, CH422G)"
+        config WP_BOARD_WT32_SC01_PLUS
+            bool "Wireless-Tag WT32-SC01 Plus (480x320 ST7796 i80, FT6336)"
+    endchoice
+
     menu "LCD"
+        config LCD_I80_PCLK_MHZ
+            depends on WP_BOARD_WT32_SC01_PLUS
+            int "i80 write clock (MHz)"
+            default 20
+            range 2 40
+
         config LCD_RGB_BOUNCE_BUFFER_HEIGHT
             int "RGB Bounce buffer height"
             default 10

@@ -11,6 +11,7 @@
 #include "esp_err.h"
 #include "esp_lcd_types.h"
 #include "esp_lcd_touch.h"
+#include "bsp/board.h"
 
 
 #ifdef __cplusplus
@@ -21,8 +22,8 @@ extern "C" {
  * LVGL related parameters, can be adjusted by users
  *
  */
-#define LVGL_PORT_H_RES             (800)
-#define LVGL_PORT_V_RES             (480)
+#define LVGL_PORT_H_RES             (LCD_H_RES)
+#define LVGL_PORT_V_RES             (LCD_V_RES)
 #define LVGL_PORT_TICK_PERIOD_MS    (CONFIG_LVGL_PORT_TICK)
 
 /**
@@ -46,7 +47,9 @@ extern "C" {
  *      (The SRAM is faster than PSRAM, but the PSRAM has a larger capacity)
  *
  */
- #if CONFIG_LVGL_PORT_BUF_PSRAM
+ #if BOARD_LCD_I80
+    #define LVGL_PORT_BUFFER_MALLOC_CAPS    (MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL)   /* the i80 DMA reads it */
+    #elif CONFIG_LVGL_PORT_BUF_PSRAM
     #define LVGL_PORT_BUFFER_MALLOC_CAPS    (MALLOC_CAP_SPIRAM)
     #elif CONFIG_LVGL_PORT_BUF_INTERNAL
     #define LVGL_PORT_BUFFER_MALLOC_CAPS    (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
@@ -162,6 +165,12 @@ void lvgl_port_unlock(void);
  *      - false: The tasks don't need to be re-scheduled
  */
 bool lvgl_port_notify_rgb_vsync(void);
+
+/**
+ * @brief i80 boards: called from the panel IO's transfer-done callback (ISR), hands the
+ *        draw buffer back to LVGL.
+ */
+bool lvgl_port_notify_flush_done(void);
 
 #ifdef __cplusplus
 }

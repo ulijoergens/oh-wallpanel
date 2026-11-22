@@ -9,6 +9,9 @@ jobs:
   firmware:
     runs-on: ubuntu-latest
     container: espressif/idf:v6.1
+    strategy:
+      matrix:
+        board: [waveshare43, wt32sc01plus]
     steps:
       - uses: actions/checkout@v5
 
@@ -16,10 +19,11 @@ jobs:
         shell: bash
         run: |
           . "$IDF_PATH/export.sh"
-          idf.py build
-          idf.py size
+          idf.py -B build -D WP_BOARD=${{ matrix.board }} build
+          idf.py -B build -D WP_BOARD=${{ matrix.board }} size
 
       - name: Build unit tests
+        if: matrix.board == 'waveshare43'
         shell: bash
         run: |
           . "$IDF_PATH/export.sh"
@@ -31,7 +35,7 @@ jobs:
       - name: Upload firmware
         uses: actions/upload-artifact@v7
         with:
-          name: oh-wallpanel-${{ github.sha }}
+          name: oh-wallpanel-${{ matrix.board }}-${{ github.sha }}
           path: |
             build/oh-wallpanel.bin
             build/oh-wallpanel.elf

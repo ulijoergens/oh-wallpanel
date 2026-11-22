@@ -3,12 +3,58 @@
  *
  * SPDX-License-Identifier: CC0-1.0
  */
+// Waveshare ESP32-S3-Touch-LCD-4.3 (vendored from bobscott45/waveshare_esp32_s3_touch_lcd_4_3).
+#include "sdkconfig.h"
+#if CONFIG_WP_BOARD_WAVESHARE_43
 
 #include "bsp/board.h"
 #include "bsp/lvgl_port.h"
+#include "driver/gpio.h"
+#include "driver/i2c_master.h"
+#include "esp_lcd_panel_ops.h"
+#include "esp_lcd_panel_rgb.h"
+#include "esp_lcd_touch_gt911.h"
+#include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_timer.h"
+
+#define CONFIG_LCD_TOUCH_CONTROLLER_GT911 1
+
+#define I2C_MASTER_SCL_IO       9
+#define I2C_MASTER_SDA_IO       8
+#define I2C_MASTER_NUM          0
+#define I2C_MASTER_FREQ_HZ      400000
+#define I2C_MASTER_TIMEOUT_MS   1000
+
+#define GPIO_INPUT_IO_4         4   // GT911 INT, selects the I2C address during reset
+#define GPIO_INPUT_PIN_SEL      (1ULL << GPIO_INPUT_IO_4)
+
+#define LCD_PIXEL_CLOCK_HZ      (14 * 1000 * 1000)
+#define RGB_DATA_WIDTH          16
+#define LCD_IO_RGB_DISP         (-1)
+#define LCD_IO_RGB_VSYNC        (GPIO_NUM_3)
+#define LCD_IO_RGB_HSYNC        (GPIO_NUM_46)
+#define LCD_IO_RGB_DE           (GPIO_NUM_5)
+#define LCD_IO_RGB_PCLK         (GPIO_NUM_7)
+#define LCD_IO_RGB_DATA0        (GPIO_NUM_14)
+#define LCD_IO_RGB_DATA1        (GPIO_NUM_38)
+#define LCD_IO_RGB_DATA2        (GPIO_NUM_18)
+#define LCD_IO_RGB_DATA3        (GPIO_NUM_17)
+#define LCD_IO_RGB_DATA4        (GPIO_NUM_10)
+#define LCD_IO_RGB_DATA5        (GPIO_NUM_39)
+#define LCD_IO_RGB_DATA6        (GPIO_NUM_0)
+#define LCD_IO_RGB_DATA7        (GPIO_NUM_45)
+#define LCD_IO_RGB_DATA8        (GPIO_NUM_48)
+#define LCD_IO_RGB_DATA9        (GPIO_NUM_47)
+#define LCD_IO_RGB_DATA10       (GPIO_NUM_21)
+#define LCD_IO_RGB_DATA11       (GPIO_NUM_1)
+#define LCD_IO_RGB_DATA12       (GPIO_NUM_2)
+#define LCD_IO_RGB_DATA13       (GPIO_NUM_42)
+#define LCD_IO_RGB_DATA14       (GPIO_NUM_41)
+#define LCD_IO_RGB_DATA15       (GPIO_NUM_40)
+#define PIN_NUM_TOUCH_RST       (-1)
+#define PIN_NUM_TOUCH_INT       (-1)
 
 static const char *TAG = "DISPLAY";
 
@@ -121,7 +167,7 @@ static esp_err_t waveshare_esp32_s3_touch_reset()
 #endif
 
 // Initialize RGB LCD
-esp_err_t waveshare_esp32_s3_rgb_lcd_init(esp_lcd_panel_handle_t *ret_panel, esp_lcd_touch_handle_t *ret_touch)
+esp_err_t board_display_init(esp_lcd_panel_handle_t *ret_panel, esp_lcd_touch_handle_t *ret_touch)
     {
         ESP_LOGI(TAG, "Install RGB LCD panel driver"); // Log the start of the RGB LCD panel driver installation
         esp_lcd_panel_handle_t panel_handle = NULL; // Declare a handle for the LCD panel
@@ -234,8 +280,8 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init(esp_lcd_panel_handle_t *ret_panel, esp
     }
 
 
-esp_err_t waveshare_rgb_lcd_bl_on()  { return ch422g_write(s_exio | EXIO_BL); }
-esp_err_t waveshare_rgb_lcd_bl_off() { return ch422g_write(s_exio & ~EXIO_BL); }
+static esp_err_t bl_on(void)  { return ch422g_write(s_exio | EXIO_BL); }
+static esp_err_t bl_off(void) { return ch422g_write(s_exio & ~EXIO_BL); }
 
 // Output register only (the mode register is already set): ~0.1 ms per write.
 static esp_err_t ch422g_out(uint8_t val)
@@ -255,9 +301,9 @@ static void wait_until(int64_t t)
 // Switching the backlight in one step dipped the board's 3.3 V below the brownout level
 // (2.44 V) on USB power, resetting the panel (2026-11-22). A 1 ms software PWM whose duty
 // ramps from 0 to 100 % (or back) spreads the current step over ramp_ms.
-esp_err_t waveshare_rgb_lcd_bl_ramp(bool on, uint32_t ramp_ms)
+esp_err_t board_backlight(bool on, uint32_t ramp_ms)
 {
-    if (ramp_ms == 0) return on ? waveshare_rgb_lcd_bl_on() : waveshare_rgb_lcd_bl_off();
+    if (ramp_ms == 0) return on ? bl_on() : bl_off();
     const int period_us = 1000;
     const int steps = ramp_ms * 1000 / period_us;
     esp_err_t ret = ch422g_write(s_exio);   // make sure the outputs are enabled
@@ -277,3 +323,10 @@ esp_err_t waveshare_rgb_lcd_bl_ramp(bool on, uint32_t ramp_ms)
     if (ret == ESP_OK) ret = ch422g_out(on ? hi : lo);
     return ret;
 }
+
+esp_err_t board_framebuffer(esp_lcd_panel_handle_t panel, void **fb)
+{
+    return esp_lcd_rgb_panel_get_frame_buffer(panel, 1, fb);
+}
+
+#endif // CONFIG_WP_BOARD_WAVESHARE_43
