@@ -128,7 +128,7 @@ The tile type is chosen automatically from the item type and its semantic tags. 
    - an LVGL demo screen shows;
    - touch coordinates are correct;
    - no drift.
-2. **Wi-Fi and settings:** Wi-Fi, captive portal and web UI settings (ported from sensor-actor), plus SNTP.
+2. **Wi-Fi and settings:** done 2026-11-22 (verified on the board). Wi-Fi, captive portal and web UI settings (ported from sensor-actor), plus SNTP.
 3. **openHAB client:**
    - the item list per tag;
    - SSE state subscription;
