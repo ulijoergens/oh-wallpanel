@@ -17,6 +17,7 @@ void wp_config_defaults(wp_cfg_t *cfg, const uint8_t mac[6])
     cfg->night_mode = true;
     cfg->night_start_min = 23 * 60;
     cfg->night_end_min = 6 * 60;
+    cfg->bl_ramp_ms = 200;   // the backlight switching dipped the supply into brownout (2026-11-22)
 }
 
 bool wp_tag_valid(const char *tag)
@@ -101,5 +102,6 @@ const char *wp_config_validate(const wp_cfg_t *c)
     if (c->home_timeout_s > 3600) return "Return to home: 0 to 3600 s";
     if (c->dark_timeout_s > 3600) return "Screen off: 0 to 3600 s";
     if (c->night_start_min >= 1440 || c->night_end_min >= 1440) return "Night mode: times 00:00 to 23:59";
+    if (c->bl_ramp_ms > 1000) return "Backlight soft start: 0 to 1000 ms";
     return NULL;
 }

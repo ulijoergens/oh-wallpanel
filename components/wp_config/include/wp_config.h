@@ -36,6 +36,9 @@ typedef struct {
     bool night_mode;                     // REQ-DISP-2
     uint16_t night_start_min;            // minutes after midnight, default 23:00
     uint16_t night_end_min;              // default 06:00
+    // New fields go at the end: an older, shorter stored record still loads (the rest
+    // keeps its defaults).
+    uint16_t bl_ramp_ms;                 // backlight soft start/stop, 0 = switch hard
 } wp_cfg_t;
 
 typedef struct {

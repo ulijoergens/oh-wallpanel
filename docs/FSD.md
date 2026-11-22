@@ -38,6 +38,7 @@ Out of scope for v1: cameras/video, charts, audio, more than one openHAB server.
 - **REQ-HW-1:** the board support is `components/wp_board`, vendored from `bobscott45/waveshare_esp32_s3_touch_lcd_4_3` 1.0.7 (IDF 6.x, LVGL 9.6). The framebuffer lives in PSRAM, with bounce-buffer mode to avoid display drift.
 - **REQ-HW-4:** CH422G EXIO5 (USB_SEL) is always kept low. When it is high, GPIO19/20 are routed to the CAN transceiver and the native USB port disappears; the CH422G keeps that state across an ESP reset. The upstream BSP set it during touch reset, which is why it is vendored. All CH422G writes go through one shadow register.
 - **REQ-HW-2:** the backlight can only be switched on and off, because the CH422G has no PWM. Dimming would need a hardware modification and is out of scope for v1.
+- **REQ-HW-5:** switching the backlight in one step dips the board's 3.3 V below the brownout level (2.44 V) on weak USB power, which resets the panel. The backlight is therefore faded on and off with a 1 ms software PWM on the CH422G over `bl_ramp_ms` (setting, default 200 ms, 0 = switch hard for a strong 5 V supply). Tested 2026-11-22 on a notebook dock: 20 switches without reset at 200 ms, brownout after 5 switches at 0.
 - **REQ-HW-3:** all I2C transfers stay within the controller FIFO. This is the lesson from the sensor-actor project, where longer transfers corrupted the ESP-IDF 6.1 i2c_master driver state.
 
 ## 3. Screens from openHAB tags

@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     container: espressif/idf:v6.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build firmware
         shell: bash
@@ -29,7 +29,7 @@ jobs:
       # The other files are for a first flash over USB:
       #   esptool.py --chip esp32s3 write_flash @flash_args   (run inside the artifact folder)
       - name: Upload firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: oh-wallpanel-${{ github.sha }}
           path: |

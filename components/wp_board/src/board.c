@@ -8,6 +8,7 @@
 #include "bsp/lvgl_port.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
 
 static const char *TAG = "DISPLAY";
 
@@ -235,3 +236,44 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init(esp_lcd_panel_handle_t *ret_panel, esp
 
 esp_err_t waveshare_rgb_lcd_bl_on()  { return ch422g_write(s_exio | EXIO_BL); }
 esp_err_t waveshare_rgb_lcd_bl_off() { return ch422g_write(s_exio & ~EXIO_BL); }
+
+// Output register only (the mode register is already set): ~0.1 ms per write.
+static esp_err_t ch422g_out(uint8_t val)
+{
+    val &= (uint8_t)~EXIO_USB_SEL;
+    esp_err_t ret = i2c_master_transmit(ch422g_out_handle, &val, 1, I2C_MASTER_TIMEOUT_MS);
+    if (ret == ESP_OK) s_exio = val;
+    return ret;
+}
+
+static void wait_until(int64_t t)
+{
+    while (esp_timer_get_time() < t) {
+    }
+}
+
+// Switching the backlight in one step dipped the board's 3.3 V below the brownout level
+// (2.44 V) on USB power, resetting the panel (2026-11-22). A 1 ms software PWM whose duty
+// ramps from 0 to 100 % (or back) spreads the current step over ramp_ms.
+esp_err_t waveshare_rgb_lcd_bl_ramp(bool on, uint32_t ramp_ms)
+{
+    if (ramp_ms == 0) return on ? waveshare_rgb_lcd_bl_on() : waveshare_rgb_lcd_bl_off();
+    const int period_us = 1000;
+    const int steps = ramp_ms * 1000 / period_us;
+    esp_err_t ret = ch422g_write(s_exio);   // make sure the outputs are enabled
+    uint8_t hi = s_exio | EXIO_BL, lo = s_exio & ~EXIO_BL;
+    for (int i = 1; i <= steps && ret == ESP_OK; i++) {
+        int on_us = (on ? i : steps - i) * period_us / steps;
+        int64_t t0 = esp_timer_get_time();
+        if (on_us > 0) {
+            ret = ch422g_out(hi);
+            wait_until(t0 + on_us);
+        }
+        if (ret == ESP_OK && on_us < period_us) {
+            ret = ch422g_out(lo);
+            wait_until(t0 + period_us);
+        }
+    }
+    if (ret == ESP_OK) ret = ch422g_out(on ? hi : lo);
+    return ret;
+}

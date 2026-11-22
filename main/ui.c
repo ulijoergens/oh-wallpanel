@@ -35,6 +35,18 @@ static lv_obj_t *s_info_name, *s_info_body;
 static char s_qr_text[96];
 static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_touch_handle_t s_touch;
+static volatile bool s_ui_started;   // the console runs before the display exists
+
+// LVGL lock for calls from other tasks (console, main). Before ui_start() the lock does
+// not exist yet; lvgl_port_lock() would assert.
+static bool ui_lock(void)
+{
+    if (!s_ui_started) {
+        printf("UI not started yet\n");
+        return false;
+    }
+    return lvgl_port_lock(1000);
+}
 static lv_obj_t *s_wake;    // catches the waking touch while the screen is dark
 static void on_wake_touch(lv_event_t *e);
 static uint16_t *s_qr_buf;   // RGB565 canvas buffer in PSRAM
@@ -174,7 +186,7 @@ static bool s_was_night;
 static void set_backlight(bool on)
 {
     if (on == s_bl_on) return;
-    esp_err_t err = on ? waveshare_rgb_lcd_bl_on() : waveshare_rgb_lcd_bl_off();
+    esp_err_t err = waveshare_rgb_lcd_bl_ramp(on, wp_config_get()->bl_ramp_ms);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "backlight %s failed: %s", on ? "on" : "off", esp_err_to_name(err));
         return;
@@ -307,6 +319,7 @@ esp_err_t ui_start(void)
         ESP_LOGE(TAG, "LVGL init failed: %s", esp_err_to_name(err));
         return err;
     }
+    s_ui_started = true;
     if (lvgl_port_lock(-1)) {
         build();
         lv_timer_t *t = lv_timer_create(refresh, 1000, NULL);
@@ -322,7 +335,7 @@ esp_err_t ui_start(void)
 // every backlight change happens under the LVGL lock, i.e. never during a touch read.
 void ui_backlight_on(void)
 {
-    if (!lvgl_port_lock(1000)) {
+    if (!ui_lock()) {
         ESP_LOGW(TAG, "backlight on: LVGL busy");
         return;
     }
@@ -380,7 +393,7 @@ void ui_dump_framebuffer(void)
 
 void ui_show_tab(int tab, int scroll_y)
 {
-    if (lvgl_port_lock(1000)) {
+    if (ui_lock()) {
         tiles_show(tab, scroll_y);
         lvgl_port_unlock();
     }
@@ -390,7 +403,7 @@ void ui_show_tab(int tab, int scroll_y)
 // Sliders need dragging and are not covered.
 void ui_tap(int x, int y)
 {
-    if (!lvgl_port_lock(1000)) return;
+    if (!ui_lock()) return;
     lv_point_t p = {x, y};
     lv_obj_t *o = lv_indev_search_obj(lv_screen_active(), &p);
     while (o && !lv_obj_is_clickable(o)) o = lv_obj_get_parent(o);
@@ -451,7 +464,7 @@ void ui_touchtest(bool on)
 {
     void ui_touchlog(bool on);
     ui_touchlog(true);   // installs the indev event hook
-    if (!lvgl_port_lock(1000)) return;
+    if (!ui_lock()) return;
     if (on && !s_tt_layer) {
         s_tt_layer = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(s_tt_layer);
@@ -488,7 +501,7 @@ void ui_touchtest(bool on)
 
 void ui_touchlog(bool on)
 {
-    if (!lvgl_port_lock(1000)) return;
+    if (!ui_lock()) return;
     static bool installed;
     if (!installed) {
         for (lv_indev_t *in = lv_indev_get_next(NULL); in; in = lv_indev_get_next(in)) {
@@ -519,7 +532,7 @@ void ui_dump_gt911(void)
         return;
     }
     uint8_t cfg[0x8101 - 0x8047], info[11];
-    if (!lvgl_port_lock(1000)) return;
+    if (!ui_lock()) return;
     esp_err_t e1 = gt911_read(0x8047, cfg, sizeof(cfg));
     esp_err_t e2 = gt911_read(0x8140, info, sizeof(info));
     lvgl_port_unlock();
@@ -543,4 +556,13 @@ void ui_dump_gt911(void)
         printf(" %02X", cfg[i]);
     }
     printf("\n");
+}
+
+// Developer aid: switches the backlight like a timeout/wake would (console 'screen').
+void ui_screen(bool on)
+{
+    if (!ui_lock()) return;
+    if (on) lv_display_trigger_activity(NULL);
+    set_backlight(on);
+    lvgl_port_unlock();
 }

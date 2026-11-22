@@ -70,6 +70,10 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init(esp_lcd_panel_handle_t *ret_panel, esp
 
 esp_err_t waveshare_rgb_lcd_bl_on();
 esp_err_t waveshare_rgb_lcd_bl_off();
+// Switches the backlight with a software-PWM ramp over ramp_ms (0 = switch at once).
+// Busy-waits for ramp_ms; call with the LVGL lock held (the CH422G shares the I2C bus
+// with the touch controller).
+esp_err_t waveshare_rgb_lcd_bl_ramp(bool on, uint32_t ramp_ms);
 
 void example_lvgl_demo_ui();
 

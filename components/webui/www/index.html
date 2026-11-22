@@ -65,6 +65,8 @@
           <label>Screen off after (s) <input name="dark_timeout_s" type="number" min="0" max="3600" required></label>
         </div>
         <small class="muted">0 turns the timeout off.</small>
+        <label>Backlight soft start (ms) <input name="bl_ramp_ms" type="number" min="0" max="1000" required>
+          <small>Fades the backlight on and off so the supply does not dip (resets on weak USB power). 0 switches it hard; try 0 with a strong 5 V supply.</small></label>
         <label class="check"><input type="checkbox" name="night_mode"> Night mode: the screen stays dark until touched</label>
         <div class="row">
           <label>From <input name="night_start" type="time" required></label>

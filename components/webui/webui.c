@@ -184,6 +184,7 @@ static esp_err_t api_settings_get(httpd_req_t *req)
     cJSON_AddStringToObject(o, "tz", c->tz);
     cJSON_AddNumberToObject(o, "home_timeout_s", c->home_timeout_s);
     cJSON_AddNumberToObject(o, "dark_timeout_s", c->dark_timeout_s);
+    cJSON_AddNumberToObject(o, "bl_ramp_ms", c->bl_ramp_ms);
     cJSON_AddBoolToObject(o, "night_mode", c->night_mode);
     hhmm(t, sizeof(t), c->night_start_min);
     cJSON_AddStringToObject(o, "night_start", t);
@@ -282,7 +283,7 @@ static esp_err_t api_settings_post(httpd_req_t *req)
 
     wp_cfg_t c = *wp_config_get();
     const char *bad = NULL;
-    int home = c.home_timeout_s, dark = c.dark_timeout_s;
+    int home = c.home_timeout_s, dark = c.dark_timeout_s, ramp = c.bl_ramp_ms;
     char wifi_pass[WP_PASS_MAX + 1] = "", token[WP_TOKEN_MAX + 1] = "";
 
     if (!bad) bad = take_str(in, "name", c.name, sizeof(c.name), "Panel name: 1 to 32 printable characters");
@@ -295,6 +296,7 @@ static esp_err_t api_settings_post(httpd_req_t *req)
     if (!bad) bad = take_str(in, "tz", c.tz, sizeof(c.tz), "Time zone: at most 48 characters");
     if (!bad) bad = take_int(in, "home_timeout_s", 0, 3600, &home, "Return to home: 0 to 3600 s");
     if (!bad) bad = take_int(in, "dark_timeout_s", 0, 3600, &dark, "Screen off: 0 to 3600 s");
+    if (!bad) bad = take_int(in, "bl_ramp_ms", 0, 1000, &ramp, "Backlight soft start: 0 to 1000 ms");
     if (!bad) bad = take_time(in, "night_start", &c.night_start_min, "Night start: HH:MM");
     if (!bad) bad = take_time(in, "night_end", &c.night_end_min, "Night end: HH:MM");
     cJSON *nm = cJSON_GetObjectItemCaseSensitive(in, "night_mode");
@@ -322,6 +324,7 @@ static esp_err_t api_settings_post(httpd_req_t *req)
     }
     c.home_timeout_s = (uint16_t)home;
     c.dark_timeout_s = (uint16_t)dark;
+    c.bl_ramp_ms = (uint16_t)ramp;
 
     why = wp_config_validate(&c);
     if (why) {

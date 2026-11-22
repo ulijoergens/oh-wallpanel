@@ -86,6 +86,7 @@ static int cmd_show(int argc, char **argv)
     printf("home_s      %u\ndark_s      %u\nnight       %s %02u:%02u-%02u:%02u\n", c->home_timeout_s, c->dark_timeout_s,
            c->night_mode ? "on" : "off", c->night_start_min / 60, c->night_start_min % 60, c->night_end_min / 60,
            c->night_end_min % 60);
+    printf("bl_ramp_ms  %u\n", c->bl_ramp_ms);
     return 0;
 }
 
@@ -103,7 +104,7 @@ static int cmd_set(int argc, char **argv)
 {
     if (argc < 2) {
         printf("usage: set <key> [value...]   keys: name ssid pass oh_url oh_token screens status_tag tz "
-               "home_s dark_s night (on|off) night_start night_end (HH:MM)\n");
+               "home_s dark_s bl_ramp_ms night (on|off) night_start night_end (HH:MM)\n");
         return 1;
     }
     // Join the remaining arguments so values may contain spaces (e.g. SSIDs).
@@ -132,6 +133,7 @@ static int cmd_set(int argc, char **argv)
     else if (!strcmp(k, "tz")) err = set_str(c.tz, sizeof(c.tz), val);
     else if (!strcmp(k, "home_s")) c.home_timeout_s = (uint16_t)atoi(val);
     else if (!strcmp(k, "dark_s")) c.dark_timeout_s = (uint16_t)atoi(val);
+    else if (!strcmp(k, "bl_ramp_ms")) c.bl_ramp_ms = (uint16_t)atoi(val);
     else if (!strcmp(k, "night")) c.night_mode = !strcmp(val, "on") || !strcmp(val, "1");
     else if (!strcmp(k, "night_start") && sscanf(val, "%u:%u", &hh, &mm) == 2 && hh < 24 && mm < 60) c.night_start_min = hh * 60 + mm;
     else if (!strcmp(k, "night_end") && sscanf(val, "%u:%u", &hh, &mm) == 2 && hh < 24 && mm < 60) c.night_end_min = hh * 60 + mm;
@@ -475,6 +477,16 @@ static int cmd_gt911(int argc, char **argv)
     return 0;
 }
 
+static int cmd_screen(int argc, char **argv)
+{
+    if (argc != 2 || (strcmp(argv[1], "on") && strcmp(argv[1], "off"))) {
+        printf("usage: screen on|off\n");
+        return 1;
+    }
+    ui_screen(!strcmp(argv[1], "on"));
+    return 0;
+}
+
 static int cmd_reload(int argc, char **argv)
 {
     wp_oh_reload();
@@ -508,6 +520,7 @@ void console_start(void)
         {.command = "touchlog", .help = "touchlog [on|off]: log what each touch hits (developer aid)", .func = cmd_touchlog},
         {.command = "touchtest", .help = "touchtest [on|off]: full-screen touch test (developer aid)", .func = cmd_touchtest},
         {.command = "gt911", .help = "Dump the touch controller configuration (developer aid)", .func = cmd_gt911},
+        {.command = "screen", .help = "screen on|off: switch the backlight (developer aid)", .func = cmd_screen},
         {.command = "reload", .help = "Reload the screens from openHAB now", .func = cmd_reload},
         {.command = "reboot", .help = "Restart the device", .func = cmd_reboot},
         {.command = "crash-test", .help = "crash-test abort|intwdt: crash on purpose to test crash reports", .func = cmd_crash_test},

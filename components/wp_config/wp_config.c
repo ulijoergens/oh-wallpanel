@@ -1,4 +1,6 @@
 // wp_config: NVS storage of the panel settings.
+#include <stddef.h>
+#include <string.h>
 #include "wp_config.h"
 
 #include <string.h>
@@ -50,10 +52,20 @@ esp_err_t wp_config_init(void)
         ESP_LOGI(TAG, "no stored settings, using defaults (%s)", s_cfg.name);
         return ESP_OK;
     }
-    if (err != ESP_OK || len != sizeof(rec) || rec.version != DEV_VERSION ||
-        rec.size != sizeof(wp_cfg_t)) {
+    const size_t head = offsetof(stored_device_t, cfg);
+    if (err != ESP_OK || len < head || rec.version != DEV_VERSION || rec.size > sizeof(wp_cfg_t) ||
+        len != head + rec.size) {
         ESP_LOGW(TAG, "stored settings unreadable or from another version, using defaults");
         return ESP_OK;
+    }
+    if (rec.size < sizeof(wp_cfg_t)) {
+        // Written by older firmware: fields were only ever appended, so take the stored
+        // prefix and keep the defaults for the newer fields.
+        wp_cfg_t merged = s_cfg;
+        memcpy(&merged, &rec.cfg, rec.size);
+        rec.cfg = merged;
+        ESP_LOGI(TAG, "settings from older firmware (%u of %u bytes), new fields at defaults",
+                 rec.size, (unsigned)sizeof(wp_cfg_t));
     }
     const char *why = wp_config_validate(&rec.cfg);
     if (why) {
