@@ -11,9 +11,18 @@ You configure the panel's screens in openHAB itself, through item tags. Nothing 
 
 The panel loads the items over the openHAB REST API and follows their states live over Server-Sent Events (no MQTT). If you retag an item in openHAB, the panel picks up the change within seconds.
 
-![Ground floor screen](docs/images/sc01plus-ground-floor.png) ![Outside screen](docs/images/sc01plus-outside.png)
+## Screenshots
 
-*WT32-SC01 Plus (480×320) with the compact layout: lights, a dimmer, a dimmer group, two awnings, the "All lights off" button and the status bar with clock, outdoor temperature, solar and grid power.*
+Both screens show lights, a dimmer, a dimmer group, two awnings, the "All lights off" button, and the status bar with clock, outdoor temperature, solar and grid power. The compact layout is on.
+
+**Waveshare ESP32-S3-Touch-LCD-4.3 (800×480)**
+
+![Ground floor screen on the Waveshare 4.3"](docs/images/waveshare43-ground-floor.png)
+![Outside screen on the Waveshare 4.3"](docs/images/waveshare43-outside.png)
+
+**WT32-SC01 Plus (480×320)**
+
+![Ground floor screen on the WT32-SC01 Plus](docs/images/sc01plus-ground-floor.png) ![Outside screen on the WT32-SC01 Plus](docs/images/sc01plus-outside.png)
 
 ## Features
 
