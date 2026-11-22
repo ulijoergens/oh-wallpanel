@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build firmware
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py build
+          idf.py size
+
+      - name: Build unit tests
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -C test/unit -B test/unit/build build
+
+      # oh-wallpanel.bin is the OTA image: upload it in the panel's web UI (Firmware page).
+      # The other files are for a first flash over USB:
+      #   esptool.py --chip esp32s3 write_flash @flash_args   (run inside the artifact folder)
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: oh-wallpanel-${{ github.sha }}
+          path: |
+            build/oh-wallpanel.bin
+            build/oh-wallpanel.elf
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/ota_data_initial.bin
+            build/flash_args
+          if-no-files-found: error

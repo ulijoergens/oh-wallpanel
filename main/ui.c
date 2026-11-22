@@ -35,6 +35,8 @@ static lv_obj_t *s_info_name, *s_info_body;
 static char s_qr_text[96];
 static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_touch_handle_t s_touch;
+static lv_obj_t *s_wake;    // catches the waking touch while the screen is dark
+static void on_wake_touch(lv_event_t *e);
 static uint16_t *s_qr_buf;   // RGB565 canvas buffer in PSRAM
 
 #define QR_PX 280
@@ -150,6 +152,77 @@ static void build(void)
     lv_obj_set_width(s_info_body, 720);
     lv_label_set_long_mode(s_info_body, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_hidden(s_info, true);
+
+    s_wake = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(s_wake);
+    lv_obj_set_size(s_wake, 800, 480);
+    lv_obj_set_clickable(s_wake, true);
+    lv_obj_add_event_cb(s_wake, on_wake_touch, LV_EVENT_ALL, NULL);
+    lv_obj_set_hidden(s_wake, true);
+}
+
+// ---- backlight (REQ-DISP-1/2) ----
+
+#define NIGHT_DEFAULT_TIMEOUT_S 30   // at night the screen never stays on
+
+static bool s_bl_ready;     // main turned the backlight on once (first frame drawn)
+static bool s_bl_on;
+static bool s_was_night;
+
+// Called in the LVGL task or under the (recursive) LVGL lock: the CH422G shares the
+// I2C bus with the touch controller, which the LVGL task polls.
+static void set_backlight(bool on)
+{
+    if (on == s_bl_on) return;
+    esp_err_t err = on ? waveshare_rgb_lcd_bl_on() : waveshare_rgb_lcd_bl_off();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "backlight %s failed: %s", on ? "on" : "off", esp_err_to_name(err));
+        return;
+    }
+    s_bl_on = on;
+    lv_obj_set_hidden(s_wake, on);
+    ESP_LOGI(TAG, "screen %s", on ? "on" : "dark");
+}
+
+// The waking touch only turns the light on. The catcher stays until the finger lifts,
+// so the press never reaches a tile underneath (REQ-DISP-1).
+static void on_wake_touch(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_PRESSED) {
+        set_backlight(true);
+        lv_obj_set_hidden(s_wake, false);   // keep catching until released
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        lv_obj_set_hidden(s_wake, true);
+    }
+}
+
+static bool in_night(const wp_cfg_t *cfg)
+{
+    if (!cfg->night_mode || !time_is_set() || cfg->night_start_min == cfg->night_end_min) return false;
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    int m = tm.tm_hour * 60 + tm.tm_min;
+    int a = cfg->night_start_min, b = cfg->night_end_min;
+    return a < b ? (m >= a && m < b) : (m >= a || m < b);   // the window may span midnight
+}
+
+static void screen_policy(bool setup)
+{
+    if (!s_bl_ready) return;
+    const wp_cfg_t *cfg = wp_config_get();
+    if (setup) {          // the setup screen with its QR code must stay readable
+        set_backlight(true);
+        return;
+    }
+    bool night = in_night(cfg);
+    bool dark = night && !s_was_night;   // REQ-DISP-2: the night starts dark
+    s_was_night = night;
+    uint32_t timeout_s = cfg->dark_timeout_s;
+    if (night && timeout_s == 0) timeout_s = NIGHT_DEFAULT_TIMEOUT_S;
+    if (timeout_s && lv_display_get_inactive_time(NULL) > timeout_s * 1000) dark = true;
+    if (dark) set_backlight(false);
 }
 
 static void refresh(lv_timer_t *t)
@@ -173,6 +246,7 @@ static void refresh(lv_timer_t *t)
 
     bool setup = w.ap_active && !on_wifi;
     bool tiles = !setup && tiles_ready();
+    screen_policy(setup);
     lv_obj_set_hidden(s_setup, !setup);
     lv_obj_set_hidden(s_tiles_panel, !tiles);
     lv_obj_set_hidden(s_info, setup || tiles);
@@ -252,11 +326,9 @@ void ui_backlight_on(void)
         ESP_LOGW(TAG, "backlight on: LVGL busy");
         return;
     }
-    esp_err_t err = waveshare_rgb_lcd_bl_on();
+    set_backlight(true);
+    s_bl_ready = true;
     lvgl_port_unlock();
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "backlight on failed: %s", esp_err_to_name(err));
-    }
 }
 
 // Developer aid: prints the frame buffer as base64 of run-length pairs (u16 count, u16

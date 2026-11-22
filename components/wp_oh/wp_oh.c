@@ -714,6 +714,7 @@ esp_err_t wp_oh_start(void)
     // and the warning log is saved to flash. This client reports problems itself, once.
     esp_log_level_set("HTTP_CLIENT", ESP_LOG_NONE);
     esp_log_level_set("transport_base", ESP_LOG_NONE);
+    esp_log_level_set("esp-tls", ESP_LOG_NONE);
     s_lock = xSemaphoreCreateMutex();
     s_ev = xEventGroupCreate();
     s_cmdq = xQueueCreateWithCaps(CMD_QUEUE_LEN, sizeof(cmd_t), MALLOC_CAP_SPIRAM);

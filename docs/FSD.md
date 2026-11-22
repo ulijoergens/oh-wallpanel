@@ -100,8 +100,8 @@ The tile type is chosen automatically from the item type and its semantic tags. 
 
 ## 5. Display behaviour
 
-- **REQ-DISP-1:** after 120 s without a touch, the screen goes dark (backlight off). Any touch wakes it. The waking touch does not trigger a tile.
-- **REQ-DISP-2:** optional night mode: between 23:00 and 06:00 the screen stays dark until touched.
+- **REQ-DISP-1:** after 120 s without a touch, the screen goes dark (backlight off). Any touch wakes it. The waking touch does not trigger a tile (an invisible layer catches it until the finger lifts). `dark_s` = 0 keeps the screen on. The setup screen (access point with QR code) never goes dark.
+- **REQ-DISP-2:** optional night mode: between 23:00 and 06:00 the screen stays dark until touched. The screen goes dark when the night window starts; after a touch at night it goes dark again after `dark_s`, or after 30 s if `dark_s` is 0.
 
 ## 6. Setup and maintenance (reused from sensor-actor)
 
@@ -113,7 +113,8 @@ The tile type is chosen automatically from the item type and its semantic tags. 
   Settings: Wi-Fi, openHAB URL and token, screen list, status tag, timeouts.
 - **REQ-NET-2:** a first-boot screen on the LCD shows the AP name and a QR code for joining it.
 - **REQ-OTA-1:** OTA by uploading an image in the web UI (`POST /api/ota`), with rollback on a failed self-check.
-- **REQ-LOG-1:** persistent error log and crash summary, as in sensor-actor.
+- **REQ-LOG-1:** persistent error log and crash summary, as in sensor-actor. The panic handler runs from IRAM (`CONFIG_ESP_PANIC_HANDLER_IRAM`): from flash it hung on cache errors, so crashes became silent watchdog resets without a report.
+- **REQ-NET-3:** the panel scans all channels and joins the strongest access point with the configured name (mesh networks have several).
 
 ## 7. Build and repository
 
@@ -138,5 +139,5 @@ The tile type is chosen automatically from the item type and its semantic tags. 
    - tab bar and status line;
    - "All off";
    - scene buttons.
-5. **Polish:** backlight timeout, OTA, error log, CI.
+5. **Polish:** backlight timeout, OTA, error log, CI. OTA update, rollback after a crash before confirmation, and the error log tested on the board 2026-11-22; CI in `.github/workflows/build.yml`.
 6. **openHAB side:** tag the first items (`wp_home`, `wp_status`) and create the API token.

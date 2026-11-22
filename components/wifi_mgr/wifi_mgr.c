@@ -305,6 +305,11 @@ esp_err_t wifi_mgr_start(void)
     strlcpy((char *)sta.sta.password, cfg->wifi_pass, sizeof(sta.sta.password));
     sta.sta.threshold.authmode = cfg->wifi_pass[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     sta.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+    // Mesh networks have several access points with the same name: scan them all and
+    // join the strongest. The default fast scan took the first one found, once a node
+    // at -79 dBm where traffic stalled (2026-11-22).
+    sta.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    sta.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta));
 
