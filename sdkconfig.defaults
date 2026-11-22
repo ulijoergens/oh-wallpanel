@@ -1,15 +1,6 @@
 # Settings common to all panel boards. Board specifics: boards/<board>.defaults, chosen
 # with idf.py -D WP_BOARD=<board> (default waveshare43, see CMakeLists.txt).
-CONFIG_IDF_TARGET="esp32s3"
-CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
-# Flash and PSRAM share the MSPI bus: every flash cache miss stalls the LCD's PSRAM reads.
-# QIO (the GD25Q64 supports it, eFuse says quad) and bigger caches keep the bus free, which
-# stops the picture jumping while code runs from flash (2026-11-22).
-CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
-CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
-CONFIG_ESP32S3_INSTRUCTION_CACHE_LINE_64B=y
-CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
@@ -19,30 +10,14 @@ CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 # up as silent TG1WDT resets with no report (2026-11-22).
 CONFIG_ESP_PANIC_HANDLER_IRAM=y
 
-CONFIG_SPIRAM=y
-CONFIG_SPIRAM_SPEED_80M=y
-CONFIG_SPIRAM_USE_MALLOC=y
-CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
-CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
-# Code and rodata stay in flash. With both options on (code copied to PSRAM), 8 of 8 boots
-# died with a silent TG1WDT reset as soon as LVGL started drawing: JTAG showed an
-# IllegalInstruction inside the panic handler itself, i.e. instruction fetches from PSRAM
-# returned garbage while the RGB LCD streamed its framebuffer from PSRAM (2026-11-22).
-# With them off: 30/30 clean boots plus a 3-minute soak with NVS writes. Cost: the panel
-# glitches briefly during flash writes (ISR not IRAM-safe, see below).
-# CONFIG_SPIRAM_FETCH_INSTRUCTIONS is not set
-# CONFIG_SPIRAM_RODATA is not set
-CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 CONFIG_FREERTOS_HZ=1000
 
 
 # LVGL port (BSP)
-CONFIG_LVGL_PORT_TASK_CORE=1
-CONFIG_LVGL_PORT_TASK_STACK_SIZE_KB=16
 CONFIG_LVGL_PORT_TASK_MIN_DELAY_MS=1
 CONFIG_LVGL_PORT_AVOID_TEAR_ENABLE=n
 CONFIG_LVGL_PORT_BUF_INTERNAL=y
-# LVGL objects in PSRAM, see main/lv_mem_psram.c
+# LVGL objects in PSRAM where there is one, see main/lv_mem_psram.c
 CONFIG_LV_USE_CUSTOM_MALLOC=y
 CONFIG_LV_DEF_REFR_PERIOD=15
 CONFIG_LV_ATTRIBUTE_FAST_MEM=y
@@ -74,7 +49,6 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
 CONFIG_ESP_TASK_WDT_PANIC=y
-CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 # Internal RAM is tight (RGB bounce buffers + LVGL draw buffers + WiFi): keep WiFi code in flash
 CONFIG_ESP_WIFI_IRAM_OPT=n
 CONFIG_ESP_WIFI_RX_IRAM_OPT=n

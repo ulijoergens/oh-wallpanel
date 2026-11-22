@@ -1,7 +1,7 @@
 # oh-wallpanel: Functional Specification (draft v0.1)
 
 The owner's decisions are listed below. The defaults this draft proposed were all confirmed by the owner on 2026-11-21.
-- Hardware: Waveshare ESP32-S3-Touch-LCD-4.3; since 2026-11-22 also the Wireless-Tag WT32-SC01 Plus (section 2.1).
+- Hardware: Waveshare ESP32-S3-Touch-LCD-4.3; since 2026-11-22 also the Wireless-Tag WT32-SC01 Plus (section 2.1) and the round ESP32-2424S012 as a single dimmer (section 2.2).
 - Firmware: ESP-IDF + LVGL.
 - openHAB link: REST + SSE, with no MQTT.
 - Purpose: a wall controller.
@@ -53,8 +53,23 @@ Verified on 2026-11-22 (MAC 3c:84:27:29:36:20, "SC01Panel"): display orientation
 | Backlight | GPIO 45, LEDC PWM at 20 kHz |
 | FT6336 touch | I2C SDA 6, SCL 5, address 0x38; INT 7 (unused, polled); reset shared with the LCD (GPIO 4) |
 
-- **REQ-HW-6:** the board is chosen at build time: Kconfig `WP_BOARD` and `boards/<board>.defaults`, selected with `idf.py -D WP_BOARD=waveshare43|wt32sc01plus` (default waveshare43). Everything above `bsp/board.h` (`board_display_init`, `board_backlight`, `board_framebuffer`) is board independent. The UI derives its geometry from the resolution (`main/ui_layout.h`): 4×2 tiles on 800×480 and 3×2 tiles with smaller fonts on 480×320.
+- **REQ-HW-6:** the board is chosen at build time: Kconfig `WP_BOARD` and `boards/<board>.defaults`, selected with `idf.py -D WP_BOARD=waveshare43|wt32sc01plus|esp32-2424s012` (default waveshare43). Chip settings live in `boards/esp32s3.defaults` and `boards/esp32c3.defaults`. Everything above `bsp/board.h` (`board_display_init`, `board_backlight`, `board_framebuffer`) is board independent. The UI derives its geometry from the resolution (`main/ui_layout.h`): 4×2 tiles on 800×480 and 3×2 tiles with smaller fonts on 480×320.
 - **REQ-HW-7:** the ST7796 keeps its own frame memory, so there is no PSRAM frame buffer. LVGL renders 40-line stripes into two internal DMA buffers, which the i80 DMA sends straight to the panel (bytes swapped by the LCD peripheral). The backlight fades with the LEDC fade unit over `bl_ramp_ms`. The console command `fbdump` renders the active screen with `lv_snapshot` instead of reading a frame buffer.
+
+### 2.2 Third board: ESP32-2424S012 (round dimmer)
+
+The ESP32-2424S012 is an ESP32-C3 (single core, 400 KB SRAM, **no PSRAM**, 4 MB flash) with a round 1.28" 240×240 GC9A01 LCD on SPI, a CST816D touch controller and native USB. It does not show tiles; it is a dimmer for one light at a time (REQ-DIM-1).
+
+| Function | Connection |
+|---|---|
+| GC9A01 LCD, SPI2 at 40 MHz | SCLK 6, MOSI 7, CS 10, DC 2 (strapping pin); no reset line |
+| Backlight | GPIO 3, LEDC PWM at 20 kHz |
+| CST816D touch | I2C SDA 4, SCL 5, address 0x15; reset GPIO 1; polled, auto-sleep disabled |
+
+Pinout from community configurations. Verified on 2026-11-22 (MAC 68:67:25:a0:cb:14, "RoundDimmer"): display orientation (no mirroring) and colours, touch mapping. **WiFi needs an external 2.4 GHz antenna on the IPEX/u.FL socket**: without one the board heard the repeater next to it at only -74 to -87 dBm and every authentication timed out (reason 2), at any TX power. The factory firmware is backed up as `round2424-factory-4MB.bin`. Console `txpower [quarter-dBm]` shows/sets the WiFi TX power (not saved); Kconfig `WP_WIFI_MAX_TX_POWER_QDBM` limits it per board (0 = no limit).
+
+- **REQ-HW-8:** without PSRAM, the big buffers move to internal RAM (`WP_CAPS_BIG`) and shrink: openHAB responses 16 KB, state stream 8 KB, registry stream 4 KB; each screen's tile array is cut to the tiles loaded. The app is built with `-Os` (`boards/esp32c3.defaults`) and uses `partitions_4mb.csv` (two 1.875 MB OTA slots). LVGL draws 24-line stripes; the bytes are swapped in the flush, because SPI has no swap option. `fbdump` encodes the stripes on their way to the panel (no read-back, no room for a full snapshot).
+- **REQ-DIM-1:** the round screen lists every writable Dimmer and Color item (and Dimmer group) on the configured screens, in screen order, and shows one at a time: its brightness in the middle, a ring around the edge to set it (sent when the finger lifts), tapping the middle toggles ON/OFF, swiping left/right goes to the next/previous dimmer, and dots show the position. Pending/error feedback as REQ-TILE-5 (yellow ring while waiting, red flash on no state change). It goes back to the first dimmer after `home_s` without a touch (REQ-SCR-7). There is no status bar; the setup screen shows only the QR code and the AP name.
 
 ## 3. Screens from openHAB tags
 
@@ -136,10 +151,10 @@ The tile type is chosen automatically from the item type and its semantic tags. 
 
 ## 7. Build and repository
 
-- ESP-IDF v6.1 (`/workspace/esp`), target esp32s3, LVGL 9 via esp_lvgl_port.
+- ESP-IDF v6.1 (`/workspace/esp`), targets esp32s3 and esp32c3 (ESP32-2424S012), LVGL 9 via esp_lvgl_port. The component lock file is per chip: `dependencies.lock` (S3) and `dependencies.lock.esp32c3`.
 - Repo: /workspace/oh-wallpanel, on GitHub as `ulijoergens/oh-wallpanel`. CI builds in GitHub Actions with `espressif/idf:v6.1`.
 - Partitions (`partitions.csv`): 8 MB flash, with two OTA slots of 3 MB each, NVS (24 KB) and a 64 KB coredump partition. The WT32-SC01 Plus uses the same table; its upper 8 MB stay unused.
-- One build directory per board: `idf.py build` (Waveshare, `build/`, `sdkconfig`) and `idf.py -B build-wt32sc01plus -D WP_BOARD=wt32sc01plus build` (`sdkconfig.wt32sc01plus`). CI builds both and uploads one artifact per board.
+- One build directory per board: `idf.py build` (Waveshare, `build/`, `sdkconfig`) and `idf.py -B build-wt32sc01plus -D WP_BOARD=wt32sc01plus build` (`sdkconfig.wt32sc01plus`), `idf.py -B build-esp32-2424s012 -D WP_BOARD=esp32-2424s012 build` (`sdkconfig.esp32-2424s012`). CI builds all three and uploads one artifact per board.
 
 ## 8. Milestones
 

@@ -1,0 +1,30 @@
+# ESP32-S3 boards (waveshare43, wt32sc01plus): chip, caches and PSRAM. Listed by
+# CMakeLists.txt between sdkconfig.defaults and boards/<board>.defaults.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# Flash and PSRAM share the MSPI bus: every flash cache miss stalls the LCD's PSRAM reads.
+# QIO (the GD25Q64 supports it, eFuse says quad) and bigger caches keep the bus free, which
+# stops the picture jumping while code runs from flash (2026-11-22).
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_LINE_64B=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
+# Code and rodata stay in flash. With both options on (code copied to PSRAM), 8 of 8 boots
+# died with a silent TG1WDT reset as soon as LVGL started drawing: JTAG showed an
+# IllegalInstruction inside the panic handler itself, i.e. instruction fetches from PSRAM
+# returned garbage while the RGB LCD streamed its framebuffer from PSRAM (2026-11-22).
+# With them off: 30/30 clean boots plus a 3-minute soak with NVS writes. Cost: the panel
+# glitches briefly during flash writes (ISR not IRAM-safe, see below).
+# CONFIG_SPIRAM_FETCH_INSTRUCTIONS is not set
+# CONFIG_SPIRAM_RODATA is not set
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+
+CONFIG_LVGL_PORT_TASK_CORE=1
+CONFIG_LVGL_PORT_TASK_STACK_SIZE_KB=16
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y

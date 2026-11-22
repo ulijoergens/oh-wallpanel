@@ -4,6 +4,7 @@
 // tiles_tick() (LVGL task) then rebuilds or syncs from the model under its lock.
 #include "ui_tiles.h"
 #include "ui_layout.h"
+#if !BOARD_ROUND   // round screens use ui_dimmer.c instead
 
 #include <math.h>
 #include <stdio.h>
@@ -796,3 +797,5 @@ void tiles_show(int tab, int scroll_y)
     lv_obj_t *page = lv_obj_get_child(lv_tabview_get_content(s_tv), tab);
     if (page) lv_obj_scroll_to_y(page, scroll_y, LV_ANIM_OFF);
 }
+
+#endif // !BOARD_ROUND

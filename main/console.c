@@ -38,9 +38,12 @@ static int cmd_status(int argc, char **argv)
     const wp_cfg_t *c = wp_config_get();
     wifi_mgr_status_t w;
     wifi_mgr_get_status(&w);
-    printf("panel    %s, firmware %s, uptime %llds, free internal %u, PSRAM %u\n", c->name,
-           esp_app_get_description()->version, esp_timer_get_time() / 1000000,
-           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    printf("panel    %s, firmware %s, uptime %llds, free internal %u (min %u, largest %u), PSRAM %u\n",
+           c->name, esp_app_get_description()->version, esp_timer_get_time() / 1000000,
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     printf("wifi     %s, network \"%s\"", wifi_mgr_state_name(w.state), w.ssid);
     if (w.state == WIFI_MGR_CONNECTED) {
         printf(", IP %s, RSSI %d dBm", w.ip, w.rssi);
@@ -370,7 +373,7 @@ static int cmd_screens(int argc, char **argv)
 {
     // Copy one screen at a time so the model lock is not held while printing.
     wp_oh_screen_t copy;
-    copy.tiles = heap_caps_malloc(WP_MAX_TILES * sizeof(wp_tile_t), MALLOC_CAP_SPIRAM);
+    copy.tiles = heap_caps_malloc(WP_MAX_TILES * sizeof(wp_tile_t), WP_CAPS_BIG);
     if (!copy.tiles) {
         printf("out of memory\n");
         return 1;
@@ -478,6 +481,19 @@ static int cmd_gt911(int argc, char **argv)
     return 0;
 }
 
+// Developer aid: WiFi transmit power, in 0.25 dBm (e.g. 34 = 8.5 dBm, 78 = 19.5 dBm).
+// Not saved; the board default is CONFIG_WP_WIFI_MAX_TX_POWER_QDBM.
+static int cmd_txpower(int argc, char **argv)
+{
+    if (argc >= 2) {
+        esp_err_t err = esp_wifi_set_max_tx_power((int8_t)atoi(argv[1]));
+        if (err != ESP_OK) printf("failed: %s\n", esp_err_to_name(err));
+    }
+    int8_t p = 0;
+    if (esp_wifi_get_max_tx_power(&p) == ESP_OK) printf("TX power %d (%.2f dBm)\n", p, p / 4.0);
+    return 0;
+}
+
 static int cmd_screen(int argc, char **argv)
 {
     if (argc != 2 || (strcmp(argv[1], "on") && strcmp(argv[1], "off"))) {
@@ -521,6 +537,7 @@ void console_start(void)
         {.command = "touchlog", .help = "touchlog [on|off]: log what each touch hits (developer aid)", .func = cmd_touchlog},
         {.command = "touchtest", .help = "touchtest [on|off]: full-screen touch test (developer aid)", .func = cmd_touchtest},
         {.command = "gt911", .help = "Dump the touch controller configuration (developer aid)", .func = cmd_gt911},
+        {.command = "txpower", .help = "txpower [quarter-dBm]: show or set the WiFi TX power (developer aid, not saved)", .func = cmd_txpower},
         {.command = "screen", .help = "screen on|off: switch the backlight (developer aid)", .func = cmd_screen},
         {.command = "reload", .help = "Reload the screens from openHAB now", .func = cmd_reload},
         {.command = "reboot", .help = "Restart the device", .func = cmd_reboot},

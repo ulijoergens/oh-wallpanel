@@ -12,6 +12,7 @@
 #include "esp_lcd_types.h"
 #include "esp_lcd_touch.h"
 #include "bsp/board.h"
+#include "lvgl.h"
 
 
 #ifdef __cplusplus
@@ -47,8 +48,8 @@ extern "C" {
  *      (The SRAM is faster than PSRAM, but the PSRAM has a larger capacity)
  *
  */
- #if BOARD_LCD_I80
-    #define LVGL_PORT_BUFFER_MALLOC_CAPS    (MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL)   /* the i80 DMA reads it */
+ #if BOARD_FLUSH_ASYNC
+    #define LVGL_PORT_BUFFER_MALLOC_CAPS    (MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL)   /* the i80/SPI DMA reads it */
     #elif CONFIG_LVGL_PORT_BUF_PSRAM
     #define LVGL_PORT_BUFFER_MALLOC_CAPS    (MALLOC_CAP_SPIRAM)
     #elif CONFIG_LVGL_PORT_BUF_INTERNAL
@@ -171,6 +172,12 @@ bool lvgl_port_notify_rgb_vsync(void);
  *        draw buffer back to LVGL.
  */
 bool lvgl_port_notify_flush_done(void);
+
+// Developer aid (console 'fbdump' on boards whose panel cannot be read back): tap is called
+// in the LVGL task with every area and its pixels (little-endian RGB565) before they are
+// sent to the panel. NULL removes it.
+typedef void (*lvgl_port_flush_tap_t)(const lv_area_t *area, const uint16_t *px);
+void lvgl_port_set_flush_tap(lvgl_port_flush_tap_t tap);
 
 #ifdef __cplusplus
 }

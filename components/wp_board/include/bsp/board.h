@@ -17,6 +17,15 @@
 #define LCD_V_RES           320
 #define BOARD_LCD_I80       1
 #define BOARD_HAS_FRAMEBUFFER 0
+#elif CONFIG_WP_BOARD_ESP32_2424S012
+// ESP32-2424S012: ESP32-C3 without PSRAM, round 1.28" GC9A01 on SPI (no read-back),
+// CST816D touch, backlight on a GPIO. The UI shows one dimmer at a time (ui_dimmer.c).
+#define BOARD_NAME          "ESP32-2424S012"
+#define LCD_H_RES           240
+#define LCD_V_RES           240
+#define BOARD_LCD_SPI       1
+#define BOARD_ROUND         1
+#define BOARD_HAS_FRAMEBUFFER 0
 #else
 // Waveshare ESP32-S3-Touch-LCD-4.3: 16-bit RGB panel streamed from a PSRAM frame buffer,
 // GT911 touch, backlight and resets on a CH422G I/O expander.
@@ -27,6 +36,10 @@
 #define BOARD_HAS_FRAMEBUFFER 1
 #define RGB_BOUNCE_BUFFER_SIZE (LCD_H_RES * CONFIG_LCD_RGB_BOUNCE_BUFFER_HEIGHT)
 #endif
+
+// The panel IO reports when a transfer is done and only then gets LVGL's buffer back
+// (i80, SPI); RGB panels copy into a frame buffer and sync on VSYNC instead.
+#define BOARD_FLUSH_ASYNC   (BOARD_LCD_I80 || BOARD_LCD_SPI)
 
 // Brings up the display and the touch controller. *ret_touch is NULL when the touch
 // controller did not answer (the display still works).

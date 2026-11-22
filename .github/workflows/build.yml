@@ -11,7 +11,7 @@ jobs:
     container: espressif/idf:v6.1
     strategy:
       matrix:
-        board: [waveshare43, wt32sc01plus]
+        board: [waveshare43, wt32sc01plus, esp32-2424s012]
     steps:
       - uses: actions/checkout@v5
 
@@ -31,7 +31,7 @@ jobs:
 
       # oh-wallpanel.bin is the OTA image: upload it in the panel's web UI (Firmware page).
       # The other files are for a first flash over USB:
-      #   esptool.py --chip esp32s3 write_flash @flash_args   (run inside the artifact folder)
+      #   esptool.py write_flash @flash_args   (run inside the artifact folder)
       - name: Upload firmware
         uses: actions/upload-artifact@v7
         with:

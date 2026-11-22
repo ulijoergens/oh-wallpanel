@@ -1,4 +1,5 @@
 // Crash reports from the core dump partition, see wp_crash.h.
+#include "sdkconfig.h"
 #include "wp_crash.h"
 
 #include <stdio.h>
@@ -29,11 +30,20 @@ static void load(void)
     if (sum && esp_core_dump_get_summary(sum) == ESP_OK) {
         strlcpy(s_info.task, sum->exc_task, sizeof(s_info.task));
         s_info.pc = sum->exc_pc;
+#if CONFIG_IDF_TARGET_ARCH_RISCV
+        // RISC-V (ESP32-C3): no backtrace in the summary; the return address stands in.
+        s_info.exc_cause = sum->ex_info.mcause;
+        s_info.exc_vaddr = sum->ex_info.mtval;
+        s_info.bt_depth = 1;
+        s_info.bt[0] = sum->ex_info.ra;
+        s_info.bt_corrupted = false;
+#else
         s_info.exc_cause = sum->ex_info.exc_cause;
         s_info.exc_vaddr = sum->ex_info.exc_vaddr;
         s_info.bt_depth = sum->exc_bt_info.depth > 16 ? 16 : sum->exc_bt_info.depth;
         memcpy(s_info.bt, sum->exc_bt_info.bt, sizeof(uint32_t) * s_info.bt_depth);
         s_info.bt_corrupted = sum->exc_bt_info.corrupted;
+#endif
         for (int i = 0; i < 8; i++) {
             snprintf(s_info.elf_sha256 + 2 * i, 3, "%02x", sum->app_elf_sha256[i]);
         }

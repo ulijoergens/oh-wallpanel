@@ -1,6 +1,6 @@
 // openHAB client, see wp_oh.h.
 //
-// Tasks (stacks in PSRAM, none of them touches flash):
+// Tasks (stacks in PSRAM where there is one, none of them touches flash):
 //   oh      main loop: version check, screen loading, subscription, periodic reload
 //   oh_sse  GET /rest/events/states: connection id, then state updates
 //   oh_reg  GET /rest/events?topics=items added/updated/removed: triggers a reload
@@ -30,9 +30,16 @@ static const char *TAG = "oh";
 #define RELOAD_DEBOUNCE_MS   2000      // a registry change often comes as a burst
 #define STREAM_TIMEOUT_MS    15000     // openHAB sends ALIVE every 10 s
 #define REQ_TIMEOUT_MS       8000
+#if CONFIG_SPIRAM
 #define RESP_MAX             (256 * 1024)
 #define STATES_MSG_MAX       (64 * 1024)   // the snapshot after subscribing holds every item
 #define REGISTRY_MSG_MAX     (16 * 1024)
+#else
+// No PSRAM: sized for small setups (a screen's item list was ~2 KB on 2026-11-22).
+#define RESP_MAX             (16 * 1024)
+#define STATES_MSG_MAX       (8 * 1024)
+#define REGISTRY_MSG_MAX     (4 * 1024)
+#endif
 #define CMD_QUEUE_LEN        16
 #define URL_LEN              (WP_URL_MAX + 320)
 
@@ -260,7 +267,7 @@ static bool load_screen(wp_oh_screen_t *s, const char *tag, const char *title, b
 {
     strlcpy(s->tag, tag, sizeof(s->tag));
     strlcpy(s->title, title, sizeof(s->title));
-    s->tiles = heap_caps_calloc(WP_MAX_TILES, sizeof(wp_tile_t), MALLOC_CAP_SPIRAM);
+    s->tiles = heap_caps_calloc(WP_MAX_TILES, sizeof(wp_tile_t), WP_CAPS_BIG);
     if (!s->tiles) {
         set_error("out of memory loading screen %s", tag);
         return false;
@@ -301,6 +308,9 @@ static bool load_screen(wp_oh_screen_t *s, const char *tag, const char *title, b
         ESP_LOGW(TAG, "screen %s has more than %d tiles; the rest are not shown", tag, WP_MAX_TILES);
     }
     wp_model_sort(s->tiles, n);
+    // Keep only the tiles that were loaded (matters without PSRAM: 48 tiles are ~19 KB).
+    wp_tile_t *fit = heap_caps_realloc(s->tiles, (n ? n : 1) * sizeof(wp_tile_t), WP_CAPS_BIG);
+    if (fit) s->tiles = fit;
     s->lights = 0;
     for (int i = 0; i < n; i++) s->lights += s->tiles[i].light;
     return true;
@@ -347,7 +357,7 @@ static bool load_model(body_t *b)
         set_error("screen list is empty or malformed");
         return false;
     }
-    wp_oh_model_t *nm = heap_caps_calloc(1, sizeof(*nm), MALLOC_CAP_SPIRAM);
+    wp_oh_model_t *nm = heap_caps_calloc(1, sizeof(*nm), WP_CAPS_BIG);
     if (!nm) {
         set_error("out of memory loading screens");
         return false;
@@ -422,7 +432,7 @@ static void subscribe(void)
 
 static void oh_task(void *arg)
 {
-    body_t b = {.buf = heap_caps_malloc(RESP_MAX, MALLOC_CAP_SPIRAM), .cap = RESP_MAX};
+    body_t b = {.buf = heap_caps_malloc(RESP_MAX, WP_CAPS_BIG), .cap = RESP_MAX};
     if (!b.buf) {
         ESP_LOGE(TAG, "no memory for responses");
         vTaskDelete(NULL);
@@ -717,12 +727,12 @@ esp_err_t wp_oh_start(void)
     esp_log_level_set("esp-tls", ESP_LOG_NONE);
     s_lock = xSemaphoreCreateMutex();
     s_ev = xEventGroupCreate();
-    s_cmdq = xQueueCreateWithCaps(CMD_QUEUE_LEN, sizeof(cmd_t), MALLOC_CAP_SPIRAM);
+    s_cmdq = xQueueCreateWithCaps(CMD_QUEUE_LEN, sizeof(cmd_t), WP_CAPS_BIG);
     if (!s_lock || !s_ev || !s_cmdq) return ESP_ERR_NO_MEM;
     // PSRAM stacks: internal RAM is scarce, and these tasks never write flash.
-    bool ok = xTaskCreateWithCaps(oh_task, "oh", 6144, NULL, 4, NULL, MALLOC_CAP_SPIRAM) == pdPASS &&
-              xTaskCreateWithCaps(stream_task, "oh_sse", 6144, (void *)1, 5, NULL, MALLOC_CAP_SPIRAM) == pdPASS &&
-              xTaskCreateWithCaps(stream_task, "oh_reg", 6144, NULL, 3, NULL, MALLOC_CAP_SPIRAM) == pdPASS &&
-              xTaskCreateWithCaps(cmd_task, "oh_cmd", 5120, NULL, 5, NULL, MALLOC_CAP_SPIRAM) == pdPASS;
+    bool ok = xTaskCreateWithCaps(oh_task, "oh", 6144, NULL, 4, NULL, WP_CAPS_BIG) == pdPASS &&
+              xTaskCreateWithCaps(stream_task, "oh_sse", 6144, (void *)1, 5, NULL, WP_CAPS_BIG) == pdPASS &&
+              xTaskCreateWithCaps(stream_task, "oh_reg", 6144, NULL, 3, NULL, WP_CAPS_BIG) == pdPASS &&
+              xTaskCreateWithCaps(cmd_task, "oh_cmd", 5120, NULL, 5, NULL, WP_CAPS_BIG) == pdPASS;
     return ok ? ESP_OK : ESP_FAIL;
 }

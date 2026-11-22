@@ -10,12 +10,17 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "sdkconfig.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if CONFIG_SPIRAM
 #define WP_LOG_ENTRIES  100
+#else
+#define WP_LOG_ENTRIES  30      // no PSRAM (ESP32-C3): the ring and the console's copy are ~4 KB each
+#endif
 #define WP_LOG_TEXT     120
 #define WP_LOG_PERSIST  20
 #define WP_LOG_FLUSH_S  60

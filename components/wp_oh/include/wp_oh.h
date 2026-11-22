@@ -13,11 +13,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
+#include "esp_heap_caps.h"
+#include "sdkconfig.h"
 #include "wp_config.h"
 #include "wp_model.h"
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+// Big, rarely touched buffers (models, responses, task stacks): PSRAM where the board has
+// it, otherwise internal RAM (ESP32-C3 boards).
+#if CONFIG_SPIRAM
+#define WP_CAPS_BIG (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+#else
+#define WP_CAPS_BIG (MALLOC_CAP_DEFAULT)
 #endif
 
 typedef struct {

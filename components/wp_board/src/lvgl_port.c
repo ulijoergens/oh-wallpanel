@@ -23,7 +23,10 @@ IRAM_ATTR static bool rgb_lcd_on_vsync_event(esp_lcd_panel_handle_t panel, const
     return lvgl_port_notify_rgb_vsync();
 }
 #else
-static lv_display_t *s_disp;   // for the i80 transfer-done callback
+static lv_display_t *s_disp;   // for the i80/SPI transfer-done callback
+#if BOARD_FLUSH_ASYNC
+static volatile lvgl_port_flush_tap_t s_tap;
+#endif
 #endif
 
 static const char *TAG = "lv_port";                      // Tag for logging
@@ -423,10 +426,19 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
     const int offsety1 = area->y1; // Start Y coordinate of the area to flush
     const int offsety2 = area->y2; // End Y coordinate of the area to flush
 
+#if BOARD_FLUSH_ASYNC
+    lvgl_port_flush_tap_t tap = s_tap;
+    if (tap) tap(area, (const uint16_t *)color_map);
+#endif
+#if BOARD_LCD_SPI
+    /* LVGL renders little-endian RGB565; SPI sends the bytes in memory order (no swap
+     * option in the SPI panel IO, unlike i80). */
+    lv_draw_sw_rgb565_swap(color_map, (offsetx2 - offsetx1 + 1) * (offsety2 - offsety1 + 1));
+#endif
     /* Just copy data from the color map to the RGB frame buffer */
     esp_lcd_panel_draw_bitmap(panel_handle, offsetx1, offsety1, offsetx2 + 1, offsety2 + 1, color_map);
-#if BOARD_LCD_I80
-    /* i80: the DMA reads straight from LVGL's buffer; lvgl_port_notify_flush_done()
+#if BOARD_FLUSH_ASYNC
+    /* i80/SPI: the DMA reads straight from LVGL's buffer; lvgl_port_notify_flush_done()
      * (transfer done) hands it back to LVGL. */
     return;
 #endif
@@ -756,7 +768,12 @@ bool lvgl_port_notify_rgb_vsync(void)
 
 
 
-#if BOARD_LCD_I80
+#if BOARD_FLUSH_ASYNC
+void lvgl_port_set_flush_tap(lvgl_port_flush_tap_t tap)
+{
+    s_tap = tap;
+}
+
 bool lvgl_port_notify_flush_done(void)
 {
     if (s_disp) lv_display_flush_ready(s_disp);

@@ -1,0 +1,10 @@
+# ESP32-2424S012: ESP32-C3, 4 MB flash, no PSRAM, 1.28" round 240x240 GC9A01 (SPI),
+# CST816D touch. Shows one dimmer at a time (main/ui_dimmer.c).
+CONFIG_WP_BOARD_ESP32_2424S012=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_4mb.csv"
+
+# LVGL draw buffers (internal, DMA-capable): 2 x 240 x 24 x 2 bytes
+CONFIG_LVGL_PORT_BUF_HEIGHT=24
+# the brightness in the middle of the dial
+CONFIG_LV_FONT_MONTSERRAT_40=y

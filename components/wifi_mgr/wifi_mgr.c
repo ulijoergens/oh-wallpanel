@@ -167,8 +167,8 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
             s_state = WIFI_MGR_RECONNECTING;
             portEXIT_CRITICAL(&s_lock);
         } else {
-            ESP_LOGI(TAG, "attempt %lu to \"%s\" failed (reason %d)",
-                     (unsigned long)s_attempts, s_ssid, d->reason);
+            ESP_LOGI(TAG, "attempt %lu to \"%s\" failed (reason %d, %d dBm)",
+                     (unsigned long)s_attempts, s_ssid, d->reason, d->rssi);
         }
         int64_t delay = s_state == WIFI_MGR_AP
                             ? (int64_t)s_timing.ap_retry_ms
@@ -240,6 +240,12 @@ static esp_err_t start_wifi(void)
     esp_err_t err = esp_wifi_start();
     if (err == ESP_OK) {
         esp_wifi_set_ps(WIFI_PS_NONE);
+#if CONFIG_WP_WIFI_MAX_TX_POWER_QDBM > 0
+        // Boards with a poorly matched antenna (ESP32-2424S012): at full power the access
+        // point never answers the authentication (reason 2, AUTH_EXPIRE).
+        esp_err_t e = esp_wifi_set_max_tx_power(CONFIG_WP_WIFI_MAX_TX_POWER_QDBM);
+        if (e != ESP_OK) ESP_LOGW(TAG, "TX power limit failed: %s", esp_err_to_name(e));
+#endif
     }
     return err;
 }

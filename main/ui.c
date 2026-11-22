@@ -51,7 +51,7 @@ static bool ui_lock(void)
 }
 static lv_obj_t *s_wake;    // catches the waking touch while the screen is dark
 static void on_wake_touch(lv_event_t *e);
-static uint16_t *s_qr_buf;   // RGB565 canvas buffer in PSRAM
+static uint16_t *s_qr_buf;   // RGB565 canvas buffer, only while the setup screen shows
 
 // Draws text as a QR code into an RGB565 canvas, using the qrcodegen library bundled with
 // LVGL. LVGL 9.6's lv_qrcode widget is not used: rendering its 1-bit (I1) canvas hung the
@@ -77,6 +77,30 @@ static void qr_draw(const char *text)
         ESP_LOGE(TAG, "QR encoding failed for \"%s\"", text);
     }
     lv_obj_invalidate(s_qr);
+}
+
+// The QR canvas needs QR_PX^2 * 2 bytes (29 KB on the round board, which has no PSRAM),
+// so it exists only while the setup screen is shown.
+static void qr_show(bool show)
+{
+    if (show && !s_qr_buf) {
+        s_qr_buf = heap_caps_malloc(QR_PX * QR_PX * 2, WP_CAPS_BIG);
+        if (!s_qr_buf) return;
+        for (int i = 0; i < QR_PX * QR_PX; i++) s_qr_buf[i] = 0xFFFF;
+        s_qr = lv_canvas_create(s_setup);
+        lv_canvas_set_buffer(s_qr, s_qr_buf, QR_PX, QR_PX, LV_COLOR_FORMAT_RGB565);
+#if BOARD_ROUND
+        lv_obj_align(s_qr, LV_ALIGN_CENTER, 0, -4);
+#else
+        lv_obj_set_pos(s_qr, SCR_W - QR_PX - MARGIN + 10, MARGIN + 10);
+#endif
+        s_qr_text[0] = '\0';   // draw it again
+    } else if (!show && s_qr_buf) {
+        lv_obj_delete(s_qr);
+        s_qr = NULL;
+        heap_caps_free(s_qr_buf);
+        s_qr_buf = NULL;
+    }
 }
 
 static lv_obj_t *label(lv_obj_t *par, const lv_font_t *font, uint32_t color)
@@ -127,9 +151,22 @@ static void build(void)
     lv_obj_set_flex_align(s_status_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(s_status_box, STATUS_GAP, 0);
     lv_obj_set_scrollable(s_status_box, false);
+    lv_obj_set_hidden(bar, BAR_H == 0);   // round screen: no status bar
 
     // Setup screen (REQ-NET-2): AP name and a QR code that joins it.
     s_setup = panel(scr);
+#if BOARD_ROUND
+    // Round: title, QR code and AP name stacked in the middle; the steps do not fit.
+    lv_obj_t *t = label(s_setup, FONT_TEXT, COL_TEXT);
+    lv_label_set_text(t, "Scan to set up");
+    lv_obj_align(t, LV_ALIGN_TOP_MID, 0, MARGIN);
+    s_setup_ap = label(s_setup, FONT_TEXT, COL_WARN);
+    lv_label_set_text(s_setup_ap, " ");
+    lv_obj_align(s_setup_ap, LV_ALIGN_BOTTOM_MID, 0, -MARGIN - 6);
+    s_setup_hint = label(s_setup, FONT_TEXT, COL_TEXT);
+    lv_obj_set_hidden(s_setup_hint, true);
+    // QR canvas: created by qr_show() only while the setup screen is up
+#else
     lv_obj_t *t = label(s_setup, FONT_BIG, COL_TEXT);
     lv_label_set_text(t, "Set up this panel");
     lv_obj_set_pos(t, MARGIN, MARGIN);
@@ -146,13 +183,8 @@ static void build(void)
     lv_obj_set_width(s_setup_hint, text_w);
     lv_label_set_long_mode(s_setup_hint, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_align_to(s_setup_hint, s_setup_ap, LV_ALIGN_OUT_BOTTOM_LEFT, -MARGIN, MARGIN / 2);
-    s_qr_buf = heap_caps_malloc(QR_PX * QR_PX * 2, MALLOC_CAP_SPIRAM);
-    s_qr = lv_canvas_create(s_setup);
-    if (s_qr_buf) {
-        for (int i = 0; i < QR_PX * QR_PX; i++) s_qr_buf[i] = 0xFFFF;
-        lv_canvas_set_buffer(s_qr, s_qr_buf, QR_PX, QR_PX, LV_COLOR_FORMAT_RGB565);
-    }
-    lv_obj_set_pos(s_qr, SCR_W - QR_PX - MARGIN + 10, MARGIN + 10);
+    // QR canvas: created by qr_show() only while the setup screen is up
+#endif
 
     // Tile screens (milestone 4), shown once openHAB screens are loaded.
     s_tiles_panel = panel(scr);
@@ -162,11 +194,18 @@ static void build(void)
     // Info screen: on WiFi but no screens loaded yet (openHAB not set up or unreachable).
     s_info = panel(scr);
     s_info_name = label(s_info, FONT_BIG, COL_TEXT);
-    lv_obj_set_pos(s_info_name, MARGIN, MARGIN);
     s_info_body = label(s_info, FONT_TEXT, COL_TEXT);
+    lv_label_set_long_mode(s_info_body, LV_LABEL_LONG_MODE_WRAP);
+#if BOARD_ROUND
+    lv_obj_align(s_info_name, LV_ALIGN_TOP_MID, 0, 2 * MARGIN);
+    lv_obj_set_width(s_info_body, SCR_W - 4 * MARGIN);
+    lv_obj_set_style_text_align(s_info_body, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(s_info_body, LV_ALIGN_CENTER, 0, 16);
+#else
+    lv_obj_set_pos(s_info_name, MARGIN, MARGIN);
     lv_obj_set_pos(s_info_body, MARGIN, MARGIN + (BAR_H * 3) / 2);
     lv_obj_set_width(s_info_body, SCR_W - 2 * MARGIN);
-    lv_label_set_long_mode(s_info_body, LV_LABEL_LONG_MODE_WRAP);
+#endif
     lv_obj_set_hidden(s_info, true);
 
     s_wake = lv_obj_create(lv_layer_top());
@@ -269,6 +308,7 @@ static void refresh(lv_timer_t *t)
     lv_obj_set_hidden(s_setup, !setup);
     lv_obj_set_hidden(s_tiles_panel, !tiles);
     lv_obj_set_hidden(s_info, setup || tiles);
+    qr_show(setup);
     if (setup) {
         char qr[96];
         snprintf(qr, sizeof(qr), "WIFI:T:nopass;S:%s;;", w.ap_ssid);
@@ -292,6 +332,17 @@ static void refresh(lv_timer_t *t)
         } else {
             snprintf(ohline, sizeof(ohline), "%s: %s", cfg->oh_url, o.last_error[0] ? o.last_error : o.state);
         }
+#if BOARD_ROUND
+        // Round: short lines, no URL of the openHAB server.
+        if (!cfg->oh_url[0]) snprintf(ohline, sizeof(ohline), "openHAB not set up");
+        else if (o.connected) snprintf(ohline, sizeof(ohline), "openHAB connected");
+        else snprintf(ohline, sizeof(ohline), "openHAB: %s", o.last_error[0] ? o.last_error : o.state);
+        if (on_wifi) {
+            lv_label_set_text_fmt(s_info_body, "%s\n\nhttp://%s/", ohline, w.ip);
+        } else {
+            lv_label_set_text_fmt(s_info_body, "Connecting to\n\"%s\" ...", w.ssid);
+        }
+#else
         if (on_wifi) {
             lv_label_set_text_fmt(s_info_body,
                                   "WiFi:  %s  (%s, %d dBm)\nopenHAB:  %s\n\nSettings:  http://%s/",
@@ -299,6 +350,7 @@ static void refresh(lv_timer_t *t)
         } else {
             lv_label_set_text_fmt(s_info_body, "Connecting to WiFi \"%s\" ...", w.ssid);
         }
+#endif
     }
 }
 
@@ -351,7 +403,89 @@ void ui_backlight_on(void)
     lvgl_port_unlock();
 }
 
-#if !BOARD_HAS_FRAMEBUFFER
+// ---- console 'fbdump' (developer aid, see tools/fbdump.py) ----
+//
+// Output: base64 of run-length pairs (u16 count, u16 RGB565 pixel, little endian) between
+// FBDUMP-BEGIN/END lines. The UI is mostly flat colour, so a screen is typically 20-60 KB.
+
+static struct {
+    uint8_t chunk[56];   // 14 whole pairs per line: a lost line cannot misalign the rest
+    int used;
+    uint16_t px;
+    int run;
+} s_enc;
+
+static void enc_flush_line(void)
+{
+    static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    char line[80];
+    int o = 0, used = s_enc.used;
+    const uint8_t *c = s_enc.chunk;
+    for (int j = 0; j < used; j += 3) {
+        uint32_t v = c[j] << 16 | (j + 1 < used ? c[j + 1] << 8 : 0) | (j + 2 < used ? c[j + 2] : 0);
+        line[o++] = b64[(v >> 18) & 63];
+        line[o++] = b64[(v >> 12) & 63];
+        line[o++] = j + 1 < used ? b64[(v >> 6) & 63] : '=';
+        line[o++] = j + 2 < used ? b64[v & 63] : '=';
+    }
+    line[o] = '\0';
+    printf("%s\n", line);
+    s_enc.used = 0;
+}
+
+static void enc_pair(void)
+{
+    uint8_t pair[4] = {s_enc.run & 0xFF, s_enc.run >> 8, s_enc.px & 0xFF, s_enc.px >> 8};
+    for (int k = 0; k < 4; k++) {
+        s_enc.chunk[s_enc.used++] = pair[k];
+        if (s_enc.used == sizeof(s_enc.chunk)) enc_flush_line();
+    }
+}
+
+static void enc_begin(void)
+{
+    s_enc.used = 0;
+    s_enc.run = 0;
+    printf("FBDUMP-BEGIN %d %d\n", LCD_H_RES, LCD_V_RES);
+}
+
+static void enc_pixels(const uint16_t *px, int n)
+{
+    for (int i = 0; i < n; i++) {
+        if (s_enc.run && px[i] == s_enc.px && s_enc.run < 65535) {
+            s_enc.run++;
+            continue;
+        }
+        if (s_enc.run) enc_pair();
+        s_enc.px = px[i];
+        s_enc.run = 1;
+    }
+}
+
+static void enc_end(void)
+{
+    if (s_enc.run) enc_pair();
+    if (s_enc.used) enc_flush_line();
+    printf("FBDUMP-END\n");
+}
+
+#if BOARD_LCD_SPI
+// No read-back and no RAM for a full snapshot: redraw the whole screen and encode the
+// stripes on their way to the panel (top layer included, e.g. the touch test).
+static SemaphoreHandle_t s_tap_done;
+static int s_tap_row;
+
+static void dump_tap(const lv_area_t *a, const uint16_t *px)
+{
+    if (a->x1 != 0 || a->x2 != LCD_H_RES - 1 || a->y1 != s_tap_row) return;   // not the next stripe
+    enc_pixels(px, LCD_H_RES * (a->y2 - a->y1 + 1));
+    s_tap_row = a->y2 + 1;
+    if (s_tap_row >= LCD_V_RES) {
+        lvgl_port_set_flush_tap(NULL);
+        xSemaphoreGive(s_tap_done);
+    }
+}
+#elif !BOARD_HAS_FRAMEBUFFER
 static lv_draw_buf_t *s_snap;
 static SemaphoreHandle_t s_snap_done;
 
@@ -362,19 +496,36 @@ static void snapshot_cb(void *arg)
 }
 #endif
 
-// Developer aid: prints the frame buffer as base64 of run-length pairs (u16 count, u16
-// RGB565 pixel, little endian) between FBDUMP-BEGIN/END lines. tools/fbdump.py turns it
-// into a PNG. The UI is mostly flat colour, so a screen is typically 20-60 KB.
 void ui_dump_framebuffer(void)
 {
-    static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 #if BOARD_HAS_FRAMEBUFFER
     void *fbv = NULL;
     if (!s_panel || board_framebuffer(s_panel, &fbv) != ESP_OK || !fbv) {
         printf("no frame buffer\n");
         return;
     }
-    const uint16_t *fb = fbv;
+    esp_log_level_t lvl = esp_log_level_get("*");
+    esp_log_level_set("*", ESP_LOG_NONE);   // log lines inside the dump would corrupt it
+    enc_begin();
+    enc_pixels(fbv, LCD_H_RES * LCD_V_RES);
+    enc_end();
+    esp_log_level_set("*", lvl);
+#elif BOARD_LCD_SPI
+    if (!ui_lock()) return;
+    if (!s_tap_done) s_tap_done = xSemaphoreCreateBinary();
+    xSemaphoreTake(s_tap_done, 0);
+    esp_log_level_t lvl = esp_log_level_get("*");
+    esp_log_level_set("*", ESP_LOG_NONE);
+    enc_begin();
+    s_tap_row = 0;
+    lvgl_port_set_flush_tap(dump_tap);
+    lv_obj_invalidate(lv_screen_active());
+    lvgl_port_unlock();
+    bool ok = xSemaphoreTake(s_tap_done, pdMS_TO_TICKS(5000)) == pdTRUE;
+    lvgl_port_set_flush_tap(NULL);
+    if (ok) enc_end();
+    esp_log_level_set("*", lvl);
+    if (!ok) printf("\nFBDUMP-FAILED (screen not redrawn in time)\n");
 #else
     // The panel keeps its frame in its own memory: render the active screen instead
     // (without the top layer, i.e. without the touch test).
@@ -391,42 +542,12 @@ void ui_dump_framebuffer(void)
         if (snap) lv_draw_buf_destroy(snap);
         return;
     }
-    const uint16_t *fb = (const uint16_t *)snap->data;
-#endif
-    const int n = LCD_H_RES * LCD_V_RES;
     esp_log_level_t lvl = esp_log_level_get("*");
-    esp_log_level_set("*", ESP_LOG_NONE);   // log lines inside the dump would corrupt it
-    printf("FBDUMP-BEGIN %d %d\n", LCD_H_RES, LCD_V_RES);
-    uint8_t chunk[56];   // 14 whole pairs per line: a lost line cannot misalign the rest
-    int used = 0;
-    char line[80];
-    int i = 0;
-    while (i < n) {
-        uint16_t px = fb[i];
-        int run = 1;
-        while (i + run < n && run < 65535 && fb[i + run] == px) run++;
-        i += run;
-        uint8_t pair[4] = {run & 0xFF, run >> 8, px & 0xFF, px >> 8};
-        for (int k = 0; k < 4; k++) {
-            chunk[used++] = pair[k];
-            if (used == sizeof(chunk) || (i >= n && k == 3)) {
-                int o = 0;
-                for (int j = 0; j < used; j += 3) {
-                    uint32_t v = chunk[j] << 16 | (j + 1 < used ? chunk[j + 1] << 8 : 0) | (j + 2 < used ? chunk[j + 2] : 0);
-                    line[o++] = b64[(v >> 18) & 63];
-                    line[o++] = b64[(v >> 12) & 63];
-                    line[o++] = j + 1 < used ? b64[(v >> 6) & 63] : '=';
-                    line[o++] = j + 2 < used ? b64[v & 63] : '=';
-                }
-                line[o] = '\0';
-                printf("%s\n", line);
-                used = 0;
-            }
-        }
-    }
-    printf("FBDUMP-END\n");
+    esp_log_level_set("*", ESP_LOG_NONE);
+    enc_begin();
+    enc_pixels((const uint16_t *)snap->data, LCD_H_RES * LCD_V_RES);
+    enc_end();
     esp_log_level_set("*", lvl);
-#if !BOARD_HAS_FRAMEBUFFER
     lv_draw_buf_destroy(snap);
 #endif
 }

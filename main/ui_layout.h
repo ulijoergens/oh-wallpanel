@@ -7,7 +7,26 @@
 #define SCR_W LCD_H_RES
 #define SCR_H LCD_V_RES
 
-#if LCD_H_RES >= 800
+#if BOARD_ROUND
+// 240x240 round: no status bar or tabs; one dimmer fills the screen (ui_dimmer.c). Text
+// must stay inside the circle: about 170 px wide at the centre line.
+#define BAR_H        0
+#define TAB_H        0
+#define GAP          6
+#define TILE_COLS    1
+#define TILE_H       SCR_H
+#define TILE_PAD     10
+#define BTN_H        34
+#define ROLLER_BTN_W 38
+#define SETPT_BTN_W  54
+#define MARGIN       24
+#define QR_PX        120
+#define STATUS_GAP   8
+#define ICON_GAP     22
+#define BAR_SIDE     0
+#define FONT_TEXT    (&lv_font_montserrat_16)
+#define FONT_BIG     (&lv_font_montserrat_20)
+#elif LCD_H_RES >= 800
 // 800x480: 4 x 2 tiles of 190 x 176
 #define BAR_H        40
 #define TAB_H        56

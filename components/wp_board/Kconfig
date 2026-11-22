@@ -9,7 +9,17 @@ menu "Panel board"
             bool "Waveshare ESP32-S3-Touch-LCD-4.3 (800x480 RGB, GT911, CH422G)"
         config WP_BOARD_WT32_SC01_PLUS
             bool "Wireless-Tag WT32-SC01 Plus (480x320 ST7796 i80, FT6336)"
+        config WP_BOARD_ESP32_2424S012
+            bool "ESP32-2424S012 (ESP32-C3, round 240x240 GC9A01 SPI, CST816D)"
     endchoice
+
+    config WP_WIFI_MAX_TX_POWER_QDBM
+        int "WiFi TX power limit (0.25 dBm units, 0 = no limit)"
+        default 0
+        range 0 84
+        help
+            Some boards' antennas are so poorly matched that the access point never hears
+            them at full power. 34 = 8.5 dBm.
 
     menu "LCD"
         config LCD_I80_PCLK_MHZ
