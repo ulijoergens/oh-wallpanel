@@ -140,5 +140,5 @@ The tile type is chosen automatically from the item type and its semantic tags. 
    - tab bar and status line;
    - "All off";
    - scene buttons.
-5. **Polish:** backlight timeout, OTA, error log, CI. OTA update, rollback after a crash before confirmation, and the error log tested on the board 2026-11-22; CI in `.github/workflows/build.yml`.
+5. **Polish:** done 2026-11-22 (wake test confirmed by the owner on board 2). Backlight timeout, OTA, error log, CI. OTA update, rollback after a crash before confirmation, and the error log tested on the board 2026-11-22; CI in `.github/workflows/build.yml`.
 6. **openHAB side:** tag the first items (`wp_home`, `wp_status`) and create the API token.
