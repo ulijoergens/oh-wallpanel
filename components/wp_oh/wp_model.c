@@ -184,6 +184,35 @@ static void parse_item(const cJSON *it, wp_tile_t *t)
     }
 }
 
+int wp_model_count_array(const char *json)
+{
+    const char *p = json;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+    if (*p != '[') return -1;
+    int depth = 0, n = 0;
+    bool in_str = false, any = false;
+    for (; *p; p++) {
+        char c = *p;
+        if (in_str) {
+            if (c == '\\' && p[1]) p++;
+            else if (c == '"') in_str = false;
+            continue;
+        }
+        if (c == '"') {
+            in_str = true;
+        } else if (c == '[' || c == '{') {
+            depth++;
+        } else if (c == ']' || c == '}') {
+            if (--depth == 0) return any ? n + 1 : 0;
+        } else if (c == ',' && depth == 1) {
+            n++;
+            continue;
+        }
+        if (depth >= 1 && !(depth == 1 && (c == '[' || c == ' ' || c == '\t' || c == '\r' || c == '\n'))) any = true;
+    }
+    return -1;   // unterminated
+}
+
 int wp_model_parse_items(const char *json, wp_tile_t *out, int max, bool *truncated)
 {
     if (truncated) *truncated = false;

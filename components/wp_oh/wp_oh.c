@@ -263,15 +263,28 @@ static void free_model(wp_oh_model_t *m)
     heap_caps_free(m);
 }
 
+// Grows a screen's tile block to room for `want` tiles (capped at WP_MAX_TILES). Blocks are
+// sized from the response instead of always WP_MAX_TILES, so a reload (old and new model
+// in memory at once) only needs small blocks: matters without PSRAM.
+static bool reserve_tiles(wp_oh_screen_t *s, int *cap, int want)
+{
+    if (want > WP_MAX_TILES) want = WP_MAX_TILES;
+    if (want < 1) want = 1;
+    if (want <= *cap) return true;
+    wp_tile_t *t = heap_caps_realloc(s->tiles, want * sizeof(wp_tile_t), WP_CAPS_BIG);
+    if (!t) return false;
+    memset(t + *cap, 0, (want - *cap) * sizeof(wp_tile_t));
+    s->tiles = t;
+    *cap = want;
+    return true;
+}
+
 static bool load_screen(wp_oh_screen_t *s, const char *tag, const char *title, bool with_rules, body_t *b)
 {
     strlcpy(s->tag, tag, sizeof(s->tag));
     strlcpy(s->title, title, sizeof(s->title));
-    s->tiles = heap_caps_calloc(WP_MAX_TILES, sizeof(wp_tile_t), WP_CAPS_BIG);
-    if (!s->tiles) {
-        set_error("out of memory loading screen %s", tag);
-        return false;
-    }
+    s->tiles = NULL;
+    int cap = 0;
     char path[200], p[48];
     esp_err_t err;
     snprintf(path, sizeof(path),
@@ -282,8 +295,17 @@ static bool load_screen(wp_oh_screen_t *s, const char *tag, const char *title, b
         set_error("items of %s: %s", tag, http_problem(status, err, p, sizeof(p)));
         return false;
     }
+    int avail = wp_model_count_array(b->buf);
+    if (avail < 0) {
+        set_error("items of %s: invalid JSON", tag);
+        return false;
+    }
+    if (!reserve_tiles(s, &cap, avail)) {
+        set_error("out of memory loading screen %s", tag);
+        return false;
+    }
     bool trunc = false, trunc2 = false;
-    int n = wp_model_parse_items(b->buf, s->tiles, WP_MAX_TILES, &trunc);
+    int n = wp_model_parse_items(b->buf, s->tiles, cap, &trunc);
     if (n < 0) {
         set_error("items of %s: invalid JSON", tag);
         return false;
@@ -295,7 +317,16 @@ static bool load_screen(wp_oh_screen_t *s, const char *tag, const char *title, b
             set_error("rules of %s: %s", tag, http_problem(status, err, p, sizeof(p)));
             return false;
         }
-        int r = wp_model_parse_rules(b->buf, s->tiles + n, WP_MAX_TILES - n, &trunc2);
+        avail = wp_model_count_array(b->buf);
+        if (avail < 0) {
+            set_error("rules of %s: invalid JSON", tag);
+            return false;
+        }
+        if (!reserve_tiles(s, &cap, n + avail)) {
+            set_error("out of memory loading screen %s", tag);
+            return false;
+        }
+        int r = wp_model_parse_rules(b->buf, s->tiles + n, cap - n, &trunc2);
         if (r < 0) {
             set_error("rules of %s: invalid JSON", tag);
             return false;
@@ -308,7 +339,7 @@ static bool load_screen(wp_oh_screen_t *s, const char *tag, const char *title, b
         ESP_LOGW(TAG, "screen %s has more than %d tiles; the rest are not shown", tag, WP_MAX_TILES);
     }
     wp_model_sort(s->tiles, n);
-    // Keep only the tiles that were loaded (matters without PSRAM: 48 tiles are ~19 KB).
+    // Keep only the tiles that were loaded (some items may not have become tiles).
     wp_tile_t *fit = heap_caps_realloc(s->tiles, (n ? n : 1) * sizeof(wp_tile_t), WP_CAPS_BIG);
     if (fit) s->tiles = fit;
     s->lights = 0;

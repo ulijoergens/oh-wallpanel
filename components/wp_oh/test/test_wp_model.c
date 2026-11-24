@@ -93,6 +93,18 @@ TEST_CASE("items: truncation and bad JSON", "[wp_model]")
     TEST_ASSERT_EQUAL(0, wp_model_parse_items("[]", t, 3, &trunc));
 }
 
+TEST_CASE("count_array: elements of a top-level array without parsing", "[wp_model]")
+{
+    TEST_ASSERT_EQUAL(0, wp_model_count_array("[]"));
+    TEST_ASSERT_EQUAL(0, wp_model_count_array(" [ ] "));
+    TEST_ASSERT_EQUAL(1, wp_model_count_array("[{\"a\":1}]"));
+    TEST_ASSERT_EQUAL(2, wp_model_count_array("[{\"a\":\"x,]}\"},{\"b\":[1,2,{\"c\":3}]}]"));
+    TEST_ASSERT_EQUAL(1, wp_model_count_array("[{\"a\":\"q\\\"]\"}]"));
+    TEST_ASSERT_GREATER_THAN(3, wp_model_count_array(ITEMS));   // the truncation test cuts it at 3
+    TEST_ASSERT_EQUAL(-1, wp_model_count_array("{\"not\":\"an array\"}"));
+    TEST_ASSERT_EQUAL(-1, wp_model_count_array("[{"));
+}
+
 TEST_CASE("items: long UTF-8 labels are cut on a character boundary", "[wp_model]")
 {
     // 47 x 'a' then "é" (2 bytes): the cut at 48 bytes would split "é", so it is dropped.

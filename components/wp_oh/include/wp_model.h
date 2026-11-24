@@ -63,6 +63,10 @@ const char *wp_tile_kind_name(wp_tile_kind_t k);
 // *truncated is set when more items than max were present.
 int wp_model_parse_items(const char *json, wp_tile_t *out, int max, bool *truncated);
 
+// Number of elements of a top-level JSON array, without parsing it (no allocation), or
+// -1 when json is not an array. An upper bound for the tiles a response gives.
+int wp_model_count_array(const char *json);
+
 // Parses a GET /rest/rules?tags=..&summary=true response into scene tiles.
 int wp_model_parse_rules(const char *json, wp_tile_t *out, int max, bool *truncated);
 
