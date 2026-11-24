@@ -35,9 +35,11 @@ static const char *TAG = "board";
 #define TP_I2C_HZ       400000
 #define CST816_REG_DIS_AUTO_SLEEP 0xFE   // non-zero: stay awake, so polling always gets an ACK
 
-// Orientation with the USB-C socket at the bottom. To be verified on the board (console
-// 'touchtest'): the dot must follow the finger.
-#define LCD_MIRROR_X    false
+// Orientation with the USB-C socket at the bottom, verified on the board 2026-11-24: the
+// GC9A01 needs mirror X; the CST816D's coordinates are used as they are (the touch layer
+// is fixed to the glass, so a display mirror must not be copied to it). Check with the
+// console 'touchtest': the dot must follow the finger.
+#define LCD_MIRROR_X    true
 #define LCD_MIRROR_Y    false
 #define TP_SWAP_XY      false
 #define TP_MIRROR_X     false

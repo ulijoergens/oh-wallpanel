@@ -19,3 +19,6 @@ CONFIG_ESP_WIFI_RX_IRAM_OPT=n
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=5760
 CONFIG_LWIP_TCP_WND_DEFAULT=5760
 CONFIG_LWIP_MAX_SOCKETS=10
+# Single core: the OTA image check (SHA-256 over the whole app in esp_ota_end) and flash
+# writes keep the idle task from running; 5 s made every web OTA a task-WDT panic.
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=15

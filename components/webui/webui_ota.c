@@ -16,6 +16,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "webui_priv.h"
 
 static const char *TAG = "ota";
@@ -177,6 +178,7 @@ static esp_err_t api_ota_post(httpd_req_t *req)
             break;
         }
         total += n;
+        vTaskDelay(1);   // single-core chips: let the idle task feed the task watchdog
     }
     free(buf);
     if (why) {

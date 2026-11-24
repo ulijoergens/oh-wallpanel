@@ -7,6 +7,9 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#ifdef ESP_PLATFORM
+#include "sdkconfig.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,7 +20,14 @@ extern "C" {
 #define WP_TYPE_MAX       32
 #define WP_ICON_MAX       16
 #define WP_STATE_MAX      64
-#define WP_MAX_TILES      48     // per screen; more are dropped (logged as truncated)
+// Tiles per screen; more are dropped (logged as truncated). A screen is loaded into one
+// block of WP_MAX_TILES tiles (~410 bytes each) before it is trimmed, so boards without
+// PSRAM (ESP32-C3: ~20 KB largest free block) use a smaller limit.
+#if defined(ESP_PLATFORM) && !defined(CONFIG_SPIRAM)
+#define WP_MAX_TILES      20
+#else
+#define WP_MAX_TILES      48
+#endif
 
 typedef enum {
     WP_TILE_SWITCH,      // toggle ON/OFF (also Switch/Dimmer groups)
